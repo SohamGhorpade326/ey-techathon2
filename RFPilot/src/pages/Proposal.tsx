@@ -56,12 +56,14 @@ export default function Proposal() {
   const [editableBidContent, setEditableBidContent] = useState("");
   const [complianceItems, setComplianceItems] = useState<any[]>([]);
   const [pricingTotals, setPricingTotals] = useState<any>(null);
+  const [pricingItems, setPricingItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [discount, setDiscount] = useState(2);
   const [discountApplied, setDiscountApplied] = useState(false);
   const [savingBid, setSavingBid] = useState(false);
   const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false);
   const [coverLetterMode, setCoverLetterMode] = useState<"initial" | "ai" | "manual">("initial");
+  const [isExportingPPT, setIsExportingPPT] = useState(false);
   
   // Gmail modal states
   const [showGmailModal, setShowGmailModal] = useState(false);
@@ -80,9 +82,10 @@ export default function Proposal() {
     Promise.all([
       fetch(`${API}/proposal`).then(res => res.json()),
       fetch(`${API}/compliance`).then(res => res.json()),
-      fetch(`${API}/pricing/totals`).then(res => res.json())
+      fetch(`${API}/pricing/totals`).then(res => res.json()),
+      fetch(`${API}/pricing/output`).then(res => res.json())
     ])
-      .then(([proposalData, complianceData, totalsData]) => {
+      .then(([proposalData, complianceData, totalsData, pricingData]) => {
         // Format proposal content professionally
         const rawProposal = proposalData.proposal || "";
         const formattedProposal = formatProposalText(rawProposal);
@@ -90,6 +93,49 @@ export default function Proposal() {
         setEditableBidContent(formattedProposal); // Initialize editable content
         setComplianceItems(complianceData);
         setPricingTotals(totalsData);
+        
+        // Load saved margins from localStorage and apply them
+        const savedMargins = localStorage.getItem('pricing_margins');
+        let margins: Record<string, number> = {};
+        
+        if (savedMargins) {
+          try {
+            margins = JSON.parse(savedMargins);
+          } catch (e) {
+            console.error('Error loading saved margins:', e);
+          }
+        }
+        
+        // Always map items to ensure margin_percent is explicitly set for each row by index
+        const itemsToSet = (pricingData.items || []).map((item: any, idx: number) => {
+          // Use saved margin for this specific index, or backend value, or default to 10
+          const marginPercent = margins[idx] !== undefined 
+            ? margins[idx] 
+            : (item.margin_percent || 10);
+          const baseCost = item.material_total + item.testing_cost;
+          const sellingPrice = baseCost / (1 - (marginPercent / 100));
+          const grossMargin = sellingPrice - baseCost;
+          return {
+            ...item,
+            margin_percent: marginPercent,
+            selling_price: sellingPrice,
+            gross_margin: grossMargin
+          };
+        });
+        
+        setPricingItems(itemsToSet);
+        
+        // Load saved discount from localStorage
+        const savedDiscount = localStorage.getItem('pricing_discount');
+        const savedDiscountApplied = localStorage.getItem('pricing_discount_applied');
+        
+        if (savedDiscount) {
+          setDiscount(parseFloat(savedDiscount));
+        }
+        if (savedDiscountApplied === 'true') {
+          setDiscountApplied(true);
+        }
+        
         setLoading(false);
       })
       .catch(err => {
@@ -97,6 +143,41 @@ export default function Proposal() {
         setLoading(false);
       });
   }, []);
+
+  // Update bid content with dynamic discount information
+  useEffect(() => {
+    if (!coverContent || !pricingItems || pricingItems.length === 0) return;
+    
+    // Calculate subtotal
+    const subtotal = pricingItems.reduce((sum, item) => sum + (item.selling_price || item.line_total || 0), 0);
+    
+    // Calculate discount amount and final total
+    const discountAmount = discountApplied ? (subtotal * discount) / 100 : 0;
+    const finalTotal = discountApplied ? subtotal - discountAmount : subtotal;
+    
+    // Find and replace the total bid value line in the bid content
+    const totalBidRegex = /(?:Subtotal \(Based on Technical Configuration & Margin Analysis\): ₹[\d,]+\.?\d*\n\nDiscount Applied: [\d.]+% discount has been applied to the subtotal, resulting in a discount of ₹[\d,]+\.?\d*\.\n\n)?The (?:final )?(?:total )?bid value amounts to ₹[\d,]+\.?\d*/;
+    
+    let updatedContent = coverContent;
+    
+    if (discountApplied && discount > 0) {
+      // Replace with discount breakdown
+      const discountText = `Subtotal (Based on Technical Configuration & Margin Analysis): ₹${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\nDiscount Applied: ${discount}% discount has been applied to the subtotal, resulting in a discount of ₹${discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.\n\nThe final bid value amounts to ₹${finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
+      
+      updatedContent = coverContent.replace(
+        totalBidRegex,
+        discountText
+      );
+    } else {
+      // No discount - just update the subtotal value
+      updatedContent = coverContent.replace(
+        totalBidRegex,
+        `The total bid value amounts to ₹${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
+      );
+    }
+    
+    setEditableBidContent(updatedContent);
+  }, [discountApplied, discount, coverContent, pricingItems]);
 
   const formatProposalText = (text: string): string => {
     // Split into paragraphs and format professionally
@@ -109,6 +190,16 @@ export default function Proposal() {
 
   const handleApplyDiscount = () => {
     setDiscountApplied(true);
+    // Save discount to localStorage
+    localStorage.setItem('pricing_discount', discount.toString());
+    localStorage.setItem('pricing_discount_applied', 'true');
+  };
+
+  const handleRemoveDiscount = () => {
+    setDiscountApplied(false);
+    // Remove discount from localStorage
+    localStorage.removeItem('pricing_discount');
+    localStorage.removeItem('pricing_discount_applied');
   };
 
   const handleSaveBidChanges = async () => {
@@ -282,15 +373,25 @@ export default function Proposal() {
     }
   };
 
+  // Calculate dynamic subtotal from selling prices (includes margins)
+  const getDynamicSubtotal = () => {
+    if (!pricingItems || pricingItems.length === 0) {
+      return pricingTotals?.grand_total || 0;
+    }
+    return pricingItems.reduce((sum, item) => sum + (item.selling_price || item.line_total || 0), 0);
+  };
+
   const calculateDiscountedTotal = () => {
-    if (!pricingTotals || !discountApplied) return pricingTotals?.grand_total || 0;
-    const discountAmount = (pricingTotals.grand_total * discount) / 100;
-    return pricingTotals.grand_total - discountAmount;
+    const subtotal = getDynamicSubtotal();
+    if (!discountApplied) return subtotal;
+    const discountAmount = (subtotal * discount) / 100;
+    return subtotal - discountAmount;
   };
 
   const getDiscountAmount = () => {
-    if (!pricingTotals || !discountApplied) return 0;
-    return (pricingTotals.grand_total * discount) / 100;
+    if (!discountApplied) return 0;
+    const subtotal = getDynamicSubtotal();
+    return (subtotal * discount) / 100;
   };
 
   const handleExportPDF = () => {
@@ -439,6 +540,55 @@ export default function Proposal() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error generating Word document:", error);
+    }
+  };
+
+  const handleDownloadPPT = async () => {
+    if (!editableBidContent && !coverContent) {
+      toast({
+        title: "No Content",
+        description: "Please generate proposal content before exporting to PowerPoint.",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+
+    setIsExportingPPT(true);
+    
+    try {
+      const rfpId = "RFP_SEB_2024_1023"; // You can make this dynamic based on actual RFP ID
+      const response = await fetch(`${API}/api/proposal/export-ppt/${rfpId}`);
+      
+      if (!response.ok) {
+        throw new Error("Failed to generate PowerPoint presentation");
+      }
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "Bid_Presentation.pptx";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Success",
+        description: "PowerPoint presentation exported successfully.",
+        duration: 3000,
+      });
+    } catch (error: any) {
+      console.error("Error exporting PowerPoint:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to export PowerPoint presentation.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      setIsExportingPPT(false);
     }
   };
 
@@ -702,7 +852,7 @@ export default function Proposal() {
                   </div>
                   <div className="p-4 bg-muted/30 rounded-lg border border-border">
                     <p className="text-sm text-muted-foreground">Subtotal</p>
-                    <p className="text-2xl font-bold font-mono mt-1">₹{pricingTotals.grand_total?.toLocaleString()}</p>
+                    <p className="text-2xl font-bold font-mono mt-1">₹{getDynamicSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                 </div>
 
@@ -718,15 +868,23 @@ export default function Proposal() {
                           max="100"
                           step="0.1"
                           value={discount}
-                          onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const newDiscount = parseFloat(e.target.value) || 0;
+                            setDiscount(newDiscount);
+                            // Save to localStorage if discount is already applied
+                            if (discountApplied) {
+                              localStorage.setItem('pricing_discount', newDiscount.toString());
+                            }
+                          }}
                           className="w-32 px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                         />
                         <span className="text-muted-foreground">%</span>
                         <Button 
                           onClick={handleApplyDiscount}
                           className="ml-2"
+                          disabled={discountApplied}
                         >
-                          Apply Discount
+                          {discountApplied ? 'Discount Applied' : 'Apply Discount'}
                         </Button>
                       </div>
                     </div>
@@ -734,14 +892,25 @@ export default function Proposal() {
 
                   {discountApplied && (
                     <div className="space-y-3 pt-4 border-t border-border">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Discount ({discount}%)</span>
-                        <span className="font-mono text-destructive">-₹{getDiscountAmount().toLocaleString()}</span>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground">Discount ({discount}%)</span>
+                          <span className="font-mono text-destructive">-₹{getDiscountAmount().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <Button 
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleRemoveDiscount}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Remove Discount
+                        </Button>
                       </div>
                       <div className="p-4 bg-primary/10 rounded-lg border border-primary/30">
                         <div className="flex items-center justify-between">
                           <p className="text-sm text-primary font-medium">Grand Total (After Discount)</p>
-                          <p className="text-2xl font-bold font-mono text-primary">₹{calculateDiscountedTotal().toLocaleString()}</p>
+                          <p className="text-2xl font-bold font-mono text-primary">₹{calculateDiscountedTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                         </div>
                       </div>
                     </div>
@@ -751,10 +920,24 @@ export default function Proposal() {
                     <div className="p-4 bg-primary/10 rounded-lg border border-primary/30">
                       <div className="flex items-center justify-between">
                         <p className="text-sm text-primary font-medium">Grand Total</p>
-                        <p className="text-2xl font-bold font-mono text-primary">₹{pricingTotals.grand_total?.toLocaleString()}</p>
+                        <p className="text-2xl font-bold font-mono text-primary">₹{getDynamicSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                       </div>
                     </div>
                   )}
+
+                  {/* Pricing Note */}
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Sparkles className="h-3 w-3 text-primary" />
+                      Subtotal reflects margin adjustments from Pricing Agent. All values update dynamically based on your margin settings.
+                    </p>
+                    {discountApplied && (
+                      <p className="text-xs text-success mt-2 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Discount persists across pages and is reflected in the Full Preview bid proposal.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </TabsContent>
@@ -847,6 +1030,23 @@ export default function Proposal() {
             <Button variant="outline" onClick={handleExportWord}>
               <FileText className="h-4 w-4 mr-2" />
               Export Word
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleDownloadPPT}
+              disabled={isExportingPPT || (!editableBidContent && !coverContent)}
+            >
+              {isExportingPPT ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Download PPT
+                </>
+              )}
             </Button>
             <Button onClick={handleMarkReadyToSubmit}>
               <Send className="h-4 w-4 mr-2" />

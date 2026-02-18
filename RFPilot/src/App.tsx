@@ -18,6 +18,8 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Masteragent from "./pages/Masteragent";
 import SkuGapAnalytics from "./pages/SkuGapAnalytics";
+import StrategicInsights from "./pages/StrategicInsights";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -115,6 +117,14 @@ const App = () => (
             element={
               <ProtectedRoute allowedRoles={["super_admin", "sales", "technical", "product"]}>
                 <Masteragent />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/strategic-insights"
+            element={
+              <ProtectedRoute allowedRoles={["super_admin", "sales", "technical", "pricing", "product"]}>
+                <StrategicInsights />
               </ProtectedRoute>
             }
           />

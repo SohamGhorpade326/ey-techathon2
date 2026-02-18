@@ -13,6 +13,7 @@ import {
   Sparkles,
   Zap,
   Package,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,8 @@ const navigation = [
  
   { name: "Pricing & Summary", href: "/pricing", icon: DollarSign },
   { name: "Proposal Builder", href: "/proposal", icon: FileText },
-   { name: "SKU Gap Intelligence", href: "/sku-gap-analytics", icon: Package },
+  { name: "SKU Gap Intelligence", href: "/sku-gap-analytics", icon: Package },
+  { name: "Strategic Insights", href: "/strategic-insights", icon: Target },
   { name: "Notifications", href: "/notifications", icon: Bell, badge: 3 },
   { name: "Product Repository", href: "/repository", icon: Database },
   { name: "Settings", href: "/settings", icon: Settings },

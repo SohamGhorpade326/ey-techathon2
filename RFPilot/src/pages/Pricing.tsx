@@ -37,6 +37,7 @@ import {
   AlertCircle,
   XCircle,
   SkipForward,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +58,41 @@ export default function Pricing() {
       .then((data) => {
         setPricingData(data);
         if (data.items) {
-          setItems(data.items);
+          // Check if there are saved margins in localStorage
+          const savedMargins = localStorage.getItem('pricing_margins');
+          let margins: Record<string, number> = {};
+          
+          if (savedMargins) {
+            try {
+              margins = JSON.parse(savedMargins);
+            } catch (e) {
+              console.error('Error loading saved margins:', e);
+            }
+          }
+          
+          // Always map items to ensure margin_percent is explicitly set for each row by index
+          const itemsToSet = data.items.map((item: any, idx: number) => {
+            // Use saved margin for this specific index, or backend value, or default to 10
+            const marginPercent = margins[idx] !== undefined 
+              ? margins[idx] 
+              : (item.margin_percent || 10);
+            const baseCost = item.material_total + item.testing_cost;
+            const sellingPrice = baseCost / (1 - (marginPercent / 100));
+            const grossMargin = sellingPrice - baseCost;
+            return {
+              ...item,
+              margin_percent: marginPercent,
+              selling_price: sellingPrice,
+              gross_margin: grossMargin
+            };
+          });
+          
+          // Update grand total with calculated selling prices
+          const newGrandTotal = itemsToSet.reduce((sum: number, item: any) => 
+            sum + (item.selling_price || item.line_total || 0), 0);
+          setPricingData((prev: any) => ({ ...prev, grand_total: newGrandTotal }));
+          
+          setItems(itemsToSet);
         }
         setLoading(false);
       })
@@ -88,21 +123,36 @@ export default function Pricing() {
   }
 
   const updateQuantity = (index: number, quantity: number) => {
-    setItems((prev) =>
-      prev.map((item, idx) => {
+    setItems((prev) => {
+      const updatedItems = prev.map((item, idx) => {
         if (idx === index) {
           const newMaterialTotal = quantity * item.unit_price;
           const newLineTotal = newMaterialTotal + item.testing_cost;
+          const baseCost = newLineTotal;
+          const marginPercent = item.margin_percent || 10;
+          const newSellingPrice = baseCost / (1 - (marginPercent / 100));
+          const newGrossMargin = newSellingPrice - baseCost;
           return { 
             ...item, 
             quantity, 
             material_total: newMaterialTotal,
-            line_total: newLineTotal
+            line_total: newLineTotal,
+            selling_price: newSellingPrice,
+            gross_margin: newGrossMargin
           };
         }
         return item;
-      })
-    );
+      });
+      
+      // Save margins to localStorage using index as key
+      const margins: Record<number, number> = {};
+      updatedItems.forEach((item, idx) => {
+        margins[idx] = item.margin_percent || 10;
+      });
+      localStorage.setItem('pricing_margins', JSON.stringify(margins));
+      
+      return updatedItems;
+    });
     
     // Update pricing data totals
     setPricingData((prev: any) => {
@@ -113,10 +163,94 @@ export default function Pricing() {
         }
         return sum + (item.material_total || 0);
       }, 0);
-      const newGrandTotal = newMaterialTotal + (prev.testing_total || 0);
+      // Calculate new grand total from selling prices
+      const newGrandTotal = items.reduce((sum, item, idx) => {
+        if (idx === index) {
+          const newMaterialTotal = quantity * item.unit_price;
+          const newLineTotal = newMaterialTotal + item.testing_cost;
+          const baseCost = newLineTotal;
+          const marginPercent = item.margin_percent || 10;
+          const newSellingPrice = baseCost / (1 - (marginPercent / 100));
+          return sum + newSellingPrice;
+        }
+        return sum + (item.selling_price || item.line_total || 0);
+      }, 0);
       return {
         ...prev,
         material_total: newMaterialTotal,
+        grand_total: newGrandTotal
+      };
+    });
+  };
+
+  const updateMargin = (index: number, marginPercent: number) => {
+    setItems((prev) => {
+      const updatedItems = prev.map((item, idx) => {
+        if (idx === index) {
+          const baseCost = item.material_total + item.testing_cost;
+          const newSellingPrice = baseCost / (1 - (marginPercent / 100));
+          const newGrossMargin = newSellingPrice - baseCost;
+          return {
+            ...item,
+            margin_percent: marginPercent,
+            selling_price: newSellingPrice,
+            gross_margin: newGrossMargin
+          };
+        }
+        return item;
+      });
+      
+      // Save margins to localStorage using index as key
+      const margins: Record<number, number> = {};
+      updatedItems.forEach((item, idx) => {
+        margins[idx] = item.margin_percent || 10;
+      });
+      localStorage.setItem('pricing_margins', JSON.stringify(margins));
+      
+      // Update pricing data grand total with updatedItems
+      setPricingData((prev: any) => {
+        if (!prev) return prev;
+        const newGrandTotal = updatedItems.reduce((sum, item) => 
+          sum + (item.selling_price || item.line_total || 0), 0);
+        return {
+          ...prev,
+          grand_total: newGrandTotal
+        };
+      });
+      
+      return updatedItems;
+    });
+  };
+
+  const resetMargins = () => {
+    // Clear saved margins from localStorage
+    localStorage.removeItem('pricing_margins');
+    
+    // Reset all items to default 10% margin
+    setItems((prev) =>
+      prev.map((item) => {
+        const baseCost = item.material_total + item.testing_cost;
+        const sellingPrice = baseCost / (1 - (10 / 100));
+        const grossMargin = sellingPrice - baseCost;
+        return {
+          ...item,
+          margin_percent: 10,
+          selling_price: sellingPrice,
+          gross_margin: grossMargin
+        };
+      })
+    );
+    
+    // Update grand total
+    setPricingData((prev: any) => {
+      if (!prev) return prev;
+      const newGrandTotal = items.reduce((sum, item) => {
+        const baseCost = item.material_total + item.testing_cost;
+        const sellingPrice = baseCost / (1 - (10 / 100));
+        return sum + sellingPrice;
+      }, 0);
+      return {
+        ...prev,
         grand_total: newGrandTotal
       };
     });
@@ -130,7 +264,35 @@ export default function Pricing() {
     (sum, item) => sum + (item.testing_cost || 0), 
     0
   );
-  const grandTotal = materialTotal + testingTotal;
+  const grandTotal = items.reduce(
+    (sum, item) => sum + (item.selling_price || item.line_total || 0),
+    0
+  );
+
+  // Calculate dynamic gross margin for rationale
+  const totalGrossMargin = items.reduce(
+    (sum, item) => sum + (item.gross_margin || 0),
+    0
+  );
+
+  // Generate dynamic grand total justification
+  const getDynamicGrandTotalJustification = () => {
+    const domain = pricingData?.domain || "technical";
+    const testCount = pricingData?.totals_rationale?.testing_total_justification?.match(/(\d+)\s+mandatory/)?.[1] || "8";
+    
+    return `**FINAL BID VALUE BREAKDOWN:**
+Material Cost: ₹${materialTotal.toLocaleString()} (${items.length} SKUs × validated catalog rates)
+Testing Cost: ₹${testingTotal.toLocaleString()} (${testCount} mandatory compliance tests)
+Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Strategic margin for sustainability)
+
+**TOTAL BID PRICE: ₹${grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}**
+
+**VALUE PROPOSITION:** This pricing ensures full technical conformance (${domain} domain), quality certification (per IS/IEC standards), and zero post-delivery compliance risk. All costs are traceable to MongoDB collections (product_catalog, test_data), providing complete audit transparency.
+
+**COMPETITIVE POSITIONING:** Pricing reflects actual market rates (not inflated estimates) with mandatory testing overhead at industry-standard costs. The 100% compliance testing approach eliminates hidden post-award costs and ensures smooth project execution.
+
+**RISK MITIGATION:** By pricing all mandatory tests upfront, this bid eliminates scope creep, reduces buyer risk, and demonstrates professional-grade procurement planning that judges value in tender evaluation.`;
+  };
 
   const highRiskItems = items.filter((item) => item.risk === "High");
   const mediumRiskItems = items.filter((item) => item.risk === "Medium");
@@ -241,6 +403,12 @@ export default function Pricing() {
               <span className="text-sm text-muted-foreground">
                 {items.length} items • Auto-generated from confirmed SKUs
               </span>
+              {localStorage.getItem('pricing_margins') && (
+                <Badge variant="outline" className="bg-success/10 text-success border-success/30">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Margins Saved
+                </Badge>
+              )}
             </div>
           </div>
         </motion.div>
@@ -273,19 +441,23 @@ export default function Pricing() {
           transition={{ delay: 0.2 }}
           className="bg-card rounded-xl border border-border overflow-hidden"
         >
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead>SKU Code</TableHead>
-                <TableHead>Item Description</TableHead>
-                <TableHead className="text-right">Quantity</TableHead>
-                <TableHead className="text-right">Unit Price (₹)</TableHead>
-                <TableHead className="text-right">Material Total (₹)</TableHead>
-                <TableHead className="text-right">Testing Cost (₹)</TableHead>
-                <TableHead className="text-right">Line Total (₹)</TableHead>
-                <TableHead className="text-center">Risk</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[1400px]">
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="whitespace-nowrap">SKU Code</TableHead>
+                  <TableHead className="whitespace-nowrap">Item Description</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Quantity</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Unit Price (₹)</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Material Total (₹)</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Testing Cost (₹)</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Line Total (₹)</TableHead>
+                  <TableHead className="text-center whitespace-nowrap">Margin %</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Selling Price (₹)</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Gross Margin (₹)</TableHead>
+                  <TableHead className="text-center whitespace-nowrap">Risk</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {items.map((item, index) => {
                 const isHighRisk = item.risk === "High";
@@ -302,9 +474,9 @@ export default function Pricing() {
                       isHighRisk && "bg-destructive/5"
                     )}
                   >
-                    <TableCell className="font-mono text-sm">{item.sku_code}</TableCell>
-                    <TableCell>{item.item_name}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="font-mono text-sm whitespace-nowrap">{item.sku_code}</TableCell>
+                    <TableCell className="min-w-[200px]">{item.item_name}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         <Input
                           type="number"
@@ -317,7 +489,7 @@ export default function Pricing() {
                         <span className="text-xs text-muted-foreground">units</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono">
+                    <TableCell className="text-right font-mono whitespace-nowrap">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -339,20 +511,42 @@ export default function Pricing() {
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    <TableCell className="text-right font-mono">
+                    <TableCell className="text-right font-mono whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
                         <span>₹{item.material_total?.toLocaleString()}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono">
+                    <TableCell className="text-right font-mono whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
                         <span>₹{item.testing_cost?.toLocaleString()}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono font-medium">
+                    <TableCell className="text-right font-mono font-medium whitespace-nowrap">
                       ₹{item.line_total?.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-2">
+                        <Input
+                          type="number"
+                          value={item.margin_percent || 10}
+                          onChange={(e) =>
+                            updateMargin(index, parseFloat(e.target.value) || 0)
+                          }
+                          className="w-20 text-center"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-semibold text-primary whitespace-nowrap">
+                      ₹{(item.selling_price || item.line_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-success whitespace-nowrap">
+                      ₹{(item.gross_margin || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-center whitespace-nowrap">
                       {isHighRisk ? (
                         <Badge className="bg-destructive/10 text-destructive border border-destructive/30">
                           High
@@ -370,6 +564,7 @@ export default function Pricing() {
               })}
             </TableBody>
           </Table>
+          </div>
         </motion.div>
 
         {/* Summary */}
@@ -434,10 +629,28 @@ export default function Pricing() {
           transition={{ delay: 0.4 }}
           className="flex items-center justify-between pt-4"
         >
-          <p className="text-sm text-muted-foreground">
-            Pricing auto-generated from Product & Pricing Repository
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              Pricing auto-generated from Product & Pricing Repository
+            </p>
+            {localStorage.getItem('pricing_margins') && (
+              <p className="text-xs text-success flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                Custom margins persist across pages
+              </p>
+            )}
+          </div>
           <div className="flex gap-3">
+            {localStorage.getItem('pricing_margins') && (
+              <Button 
+                variant="outline" 
+                onClick={resetMargins}
+                className="text-destructive hover:text-destructive"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reset Margins
+              </Button>
+            )}
             <Button variant="outline">
               <Calculator className="h-4 w-4 mr-2" />
               Recalculate
@@ -530,7 +743,7 @@ export default function Pricing() {
                   <h3 className="font-semibold text-success">Grand Total Justification</h3>
                 </div>
                 <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line space-y-2">
-                  {pricingData.totals_rationale.grand_total_justification?.split('**').map((part: string, idx: number) => (
+                  {getDynamicGrandTotalJustification()?.split('**').map((part: string, idx: number) => (
                     idx % 2 === 1 ? <strong key={idx} className="text-foreground">{part}</strong> : <span key={idx}>{part}</span>
                   ))}
                 </div>
@@ -543,6 +756,10 @@ export default function Pricing() {
                   valuation system. All costs are traceable to the Product Catalog and Test Data collections in MongoDB, 
                   ensuring full transparency and audit compliance. These rationales are for internal dashboard use only 
                   and are NOT included in the final proposal document.
+                </p>
+                <p className="text-xs text-info mt-2 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3" />
+                  <strong>Dynamic Calculation:</strong> Grand Total values reflect your current margin adjustments in real-time.
                 </p>
               </div>
             </div>

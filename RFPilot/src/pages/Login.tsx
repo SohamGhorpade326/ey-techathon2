@@ -72,24 +72,24 @@ export default function Login() {
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.6 }}
-        className="hidden lg:flex lg:w-1/2 bg-sidebar p-12 flex-col justify-between relative overflow-hidden"
+        className="hidden lg:flex lg:w-1/2 bg-sidebar p-12 flex-col justify-between relative overflow-hidden shadow-2xl"
         style={{ background: "var(--gradient-sidebar)" }}
       >
         {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-sidebar-primary rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-sidebar-primary rounded-full blur-3xl" />
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-20 w-72 h-72 bg-sidebar-primary rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-sidebar-primary rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
         </div>
 
         {/* Logo */}
         <div className="relative z-10">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sidebar-primary">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sidebar-primary shadow-lg shadow-sidebar-primary/50">
               <Sparkles className="h-6 w-6 text-sidebar-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-sidebar-foreground">Agentic RFP</h1>
-              <p className="text-sm text-sidebar-muted">Response Platform</p>
+              <h1 className="text-2xl font-bold text-sidebar-foreground tracking-tight">Agentic RFP</h1>
+              <p className="text-sm text-sidebar-muted font-medium">Response Platform</p>
             </div>
           </div>
         </div>
@@ -101,11 +101,11 @@ export default function Login() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-4xl font-bold text-sidebar-foreground leading-tight"
+              className="text-4xl font-bold text-sidebar-foreground leading-tight tracking-tight"
             >
               Automatically discover RFPs.
               <br />
-              <span className="text-sidebar-primary">Respond faster.</span>
+              <span className="bg-gradient-to-r from-sidebar-primary to-blue-400 bg-clip-text text-transparent">Respond faster.</span>
               <br />
               Win more.
             </motion.h2>
@@ -118,9 +118,9 @@ export default function Login() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
-                className="flex items-start gap-4"
+                className="flex items-start gap-4 p-4 rounded-xl bg-sidebar-accent/50 backdrop-blur-sm border border-sidebar-accent/20 hover:bg-sidebar-accent/70 transition-all duration-300 hover:shadow-lg"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent shadow-md">
                   <feature.icon className="h-5 w-5 text-sidebar-primary" />
                 </div>
                 <div>
@@ -134,7 +134,7 @@ export default function Login() {
 
         {/* Footer */}
         <div className="relative z-10">
-          <p className="text-xs text-sidebar-muted">
+          <p className="text-xs text-sidebar-muted font-medium">
             Enterprise-grade security • SOC 2 Compliant • 99.9% Uptime
           </p>
         </div>
@@ -150,17 +150,17 @@ export default function Login() {
         >
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center gap-3 mb-8">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/50">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Agentic RFP</h1>
-              <p className="text-xs text-muted-foreground">Response Platform</p>
+              <h1 className="text-xl font-bold text-foreground tracking-tight">Agentic RFP</h1>
+              <p className="text-xs text-muted-foreground font-medium">Response Platform</p>
             </div>
           </div>
 
           <div className="space-y-2 mb-8">
-            <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
+            <h2 className="text-3xl font-bold text-foreground tracking-tight">Welcome back</h2>
             <p className="text-muted-foreground">
               Sign in to your account to continue
             </p>
@@ -168,7 +168,7 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email" className="text-sm font-semibold">Email address</Label>
               <Input
                 id="email"
                 type="email"
@@ -176,14 +176,14 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-12"
+                className="h-12 border-2 focus:border-primary transition-colors shadow-sm"
               />
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <a href="#" className="text-sm text-primary hover:underline">
+                <Label htmlFor="password" className="text-sm font-semibold">Password</Label>
+                <a href="#" className="text-sm text-primary hover:underline font-medium transition-colors">
                   Forgot password?
                 </a>
               </div>
@@ -195,7 +195,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-12 pr-12"
+                  className="h-12 pr-12 border-2 focus:border-primary transition-colors shadow-sm"
                 />
                 <button
                   type="button"
@@ -210,7 +210,7 @@ export default function Login() {
             <Button
               type="submit"
               variant="hero"
-              className="w-full"
+              className="w-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -229,7 +229,7 @@ export default function Login() {
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Need access?{" "}
-            <a href="#" className="text-primary font-medium hover:underline">
+            <a href="#" className="text-primary font-semibold hover:underline transition-colors">
               Contact your administrator
             </a>
           </p>

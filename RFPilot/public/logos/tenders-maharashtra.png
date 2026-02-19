@@ -1,0 +1,6 @@
+<svg width="180" height="50" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="25" cy="25" r="22" fill="#C65D2A"/>
+  <circle cx="25" cy="25" r="15" fill="#FFC107"/>
+  <text x="55" y="21" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">Tenders</text>
+  <text x="55" y="36" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">Maharashtra</text>
+</svg>

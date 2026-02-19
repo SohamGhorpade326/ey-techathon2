@@ -818,6 +818,97 @@ def clear_rfps():
 def list_rfps():
     return get_sales_output()
 
+@app.get("/rfps/debug/structure")
+def debug_sales_structure():
+    """Debug endpoint to inspect sales output structure"""
+    sales = get_sales_output()
+    if not sales or len(sales) == 0:
+        return {"error": "No RFPs in sales output"}
+    
+    # Show structure of first RFP
+    first_rfp = sales[0]
+    return {
+        "total_rfps": len(sales),
+        "first_rfp_keys": list(first_rfp.keys()) if isinstance(first_rfp, dict) else [],
+        "first_rfp_sample": first_rfp,
+        "has_extracted_item_list": "extracted_item_list" in first_rfp,
+        "has_extracted_item_list_structured": "extracted_item_list_structured" in first_rfp,
+        "extracted_item_list": first_rfp.get("extracted_item_list", []),
+        "extracted_item_list_structured": first_rfp.get("extracted_item_list_structured", [])
+    }
+
+@app.get("/rfps/{rfp_id:path}/debug")
+def debug_rfp_structure(rfp_id: str):
+    """Debug endpoint to inspect specific RFP structure"""
+    sales = get_sales_output()
+    for rfp in sales:
+        if str(rfp.get("rfp_id")) == rfp_id:
+            return {
+                "rfp_id": rfp_id,
+                "all_keys": list(rfp.keys()),
+                "has_extracted_item_list": "extracted_item_list" in rfp,
+                "has_extracted_item_list_structured": "extracted_item_list_structured" in rfp,
+                "extracted_item_list_count": len(rfp.get("extracted_item_list", [])),
+                "extracted_item_list_structured_count": len(rfp.get("extracted_item_list_structured", [])),
+                "extracted_item_list_sample": rfp.get("extracted_item_list", [])[:3],
+                "extracted_item_list_structured_sample": rfp.get("extracted_item_list_structured", [])[:3],
+                "full_rfp": rfp
+            }
+    return {"error": f"RFP {rfp_id} not found"}
+
+@app.get("/rfps/{rfp_id:path}/items")
+def get_rfp_items(rfp_id: str):
+    """Get extracted items and quantities for a specific RFP from sales output"""
+    sales = get_sales_output()
+    
+    # Debug: Log available RFP IDs
+    available_ids = [rfp.get("rfp_id") for rfp in sales if isinstance(rfp, dict)]
+    print(f"[Debug /items] Searching for rfp_id='{rfp_id}' in {len(sales)} RFPs")
+    print(f"[Debug /items] Available IDs: {available_ids}")
+    
+    for rfp in sales:
+        rfp_id_stored = str(rfp.get("rfp_id", ""))
+        print(f"[Debug /items] Comparing '{rfp_id}' == '{rfp_id_stored}': {rfp_id == rfp_id_stored}")
+        
+        if rfp_id_stored == rfp_id:
+            # Debug: Show all keys in this RFP
+            print(f"[Debug /items] Found RFP! Keys: {list(rfp.keys())}")
+            
+            # Return structured items if available, otherwise return simple list
+            items_structured = rfp.get("extracted_item_list_structured", [])
+            items_simple = rfp.get("extracted_item_list", [])
+            
+            print(f"[Debug /items] items_structured: {len(items_structured)} items")
+            print(f"[Debug /items] items_simple: {len(items_simple)} items")
+            
+            if items_structured:
+                return {
+                    "rfp_id": rfp_id,
+                    "items": items_structured,
+                    "total_items": len(items_structured)
+                }
+            elif items_simple:
+                # Convert simple list to structured format with default quantity
+                items = [
+                    {"item_name": item, "quantity": "1"}
+                    for item in items_simple
+                ]
+                return {
+                    "rfp_id": rfp_id,
+                    "items": items,
+                    "total_items": len(items)
+                }
+            else:
+                return {
+                    "rfp_id": rfp_id,
+                    "items": [],
+                    "total_items": 0,
+                    "message": "No items extracted yet. Please run the pipeline first.",
+                    "debug_keys": list(rfp.keys())
+                }
+    
+    return {"error": f"RFP {rfp_id} not found"}
+
 @app.get("/rfps/{rfp_id:path}")
 def get_rfp_details(rfp_id: str):
     sales = get_sales_output()
@@ -835,6 +926,21 @@ def get_master():
 @app.get("/technical/output")
 def get_technical():
     return get_technical_output()
+
+@app.get("/technical/output/{rfp_id:path}")
+def get_technical_by_rfp(rfp_id: str):
+    """Get technical specs for a specific RFP by RFP ID"""
+    technical = get_technical_output()
+    
+    if not technical:
+        return {"error": "No technical data available"}
+    
+    # Check if the technical output matches the requested RFP ID
+    stored_rfp_id = technical.get("rfp_id", "")
+    if str(stored_rfp_id) == rfp_id:
+        return technical
+    else:
+        return {"error": f"Technical data for RFP {rfp_id} not found. Currently stored: {stored_rfp_id}"}
 
 @app.get("/technical/debug")
 def debug_technical():

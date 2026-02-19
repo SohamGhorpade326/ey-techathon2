@@ -53,10 +53,42 @@ export default function Masteragent() {
     try {
       const completion = await groq.chat.completions.create({
         messages: [
-          { role: "system", content: "You are a senior RFP strategist. Analyze technical requirements, testing protocols, and pricing constraints to provide a 3-4 paragraph executive overview. Focus on technical-financial alignment and compliance risks." },
-          { role: "user", content: `Analyze this Master Agent payload: ${JSON.stringify(data)}` }
+          { 
+            role: "system", 
+            content: "You are a senior RFP strategist with deep expertise in technical and commercial analysis. Provide detailed, professional strategic analysis WITHOUT using any markdown formatting (no **, ###, or other symbols). Use plain text with proper section headers and indentation. Write in clear, professional language with comprehensive insights." 
+          },
+          { 
+            role: "user", 
+            content: `Provide a detailed strategic analysis of this Master Agent payload. Format as plain text without markdown symbols. Structure your analysis in 3-4 comprehensive paragraphs covering:
+
+1. EXECUTIVE OVERVIEW (Paragraph 1):
+   - Detailed overview of the RFP including ID, issuing organization, and scope
+   - Project value range and commercial significance
+   - Submission deadline with urgency assessment
+   - High-level technical focus areas and domain complexity
+
+2. TECHNICAL REQUIREMENTS AND COMPLIANCE RISKS (Paragraph 2):
+   - Detailed breakdown of technical specifications and requirements
+   - Scope items with technical complexity analysis
+   - Key compliance standards and testing requirements
+   - Potential technical risks and mitigation considerations
+   - Quality assurance and acceptance criteria
+
+3. PRICING CONSTRAINTS AND ALIGNMENT (Paragraph 3):
+   - Pricing methodology and risk thresholds
+   - Material and testing cost considerations
+   - Budget alignment with technical requirements
+   - Commercial terms and payment structures
+   - Recommendations for competitive positioning
+
+Provide deep professional insights without using markdown formatting. Use clear section headers and detailed analysis in each paragraph.
+
+Master Agent Data: ${JSON.stringify(data)}` 
+          }
         ],
         model: "llama-3.3-70b-versatile",
+        temperature: 0.5,
+        max_tokens: 1500,
       });
       setAiSummary(completion.choices[0]?.message?.content || "");
     } catch (err) {

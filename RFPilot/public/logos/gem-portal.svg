@@ -1,0 +1,8 @@
+<svg width="200" height="50" xmlns="http://www.w3.org/2000/svg">
+  <!-- Colorful star design -->
+  <polygon points="30,10 35,20 45,20 37,27 40,37 30,30 20,37 23,27 15,20 25,20" fill="#FF6B6B"/>
+  <polygon points="30,10 35,20 45,20 37,27 40,37 30,30 20,37 23,27 15,20 25,20" fill="#4ECDC4" transform="rotate(45 30 25)"/>
+  <polygon points="30,10 35,20 45,20 37,27 40,37 30,30 20,37 23,27 15,20 25,20" fill="#FFD93D" transform="rotate(90 30 25)"/>
+  <text x="60" y="22" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#333">GeM</text>
+  <text x="60" y="40" font-family="Arial, sans-serif" font-size="9" fill="#666">Government e-Marketplace</text>
+</svg>

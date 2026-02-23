@@ -23,6 +23,7 @@ import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from sentence_transformers import SentenceTransformer, util
+import faiss
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.neighbors import NearestNeighbors
 import numpy as np
@@ -1564,6 +1565,15 @@ CATALOG = None
 SKU_DOCS = None
 SKU_EMBEDDINGS = None
 
+# FAISS indexes (performance only; cosine re-rank still determines final scores)
+GLOBAL_FAISS_INDEX = None
+FAISS_INDEX_MAP = {}
+FAISS_CATEGORY_TO_CATALOG_INDICES = {}
+CATALOG_INDEX_MAP = {}
+
+# Candidate-set FAISS cache (built on filtered candidate lists)
+CANDIDATE_FAISS_INDEX_CACHE = {}
+
 # Performance caches
 CANDIDATE_EMBED_CACHE = {}
 CATALOG_MAP = {}
@@ -1577,6 +1587,7 @@ _SPEC_CACHE = {}      # Cache structured spec extraction
 def initialize_sku_embeddings():
     """Initialize global SKU embeddings once for performance"""
     global CATALOG, SKU_DOCS, SKU_EMBEDDINGS, _sku_catalog_cache, CATALOG_MAP
+    global GLOBAL_FAISS_INDEX, FAISS_INDEX_MAP, FAISS_CATEGORY_TO_CATALOG_INDICES, CATALOG_INDEX_MAP
     
     if CATALOG is not None:
         return  # Already initialized
@@ -1592,6 +1603,7 @@ def initialize_sku_embeddings():
     
     # Create fast lookup map
     CATALOG_MAP = {sku["sku_code"]: sku for sku in CATALOG}
+    CATALOG_INDEX_MAP = {sku.get("sku_code"): idx for idx, sku in enumerate(CATALOG) if sku.get("sku_code")}
     
     SKU_DOCS = []
     for sku in CATALOG:
@@ -1602,6 +1614,38 @@ def initialize_sku_embeddings():
     with torch.no_grad():
         SKU_EMBEDDINGS = MODEL.encode(SKU_DOCS, convert_to_tensor=True)
     print(f"[INIT] ✅ {len(CATALOG)} SKU embeddings cached globally")
+
+    # Build global + per-category FAISS HNSW indexes (ANN retrieval only)
+    try:
+        dim = SKU_EMBEDDINGS.shape[1]
+        _sku_np = SKU_EMBEDDINGS.detach().cpu().numpy().astype('float32', copy=False)
+
+        GLOBAL_FAISS_INDEX = faiss.IndexHNSWFlat(dim, 32)
+        GLOBAL_FAISS_INDEX.hnsw.efConstruction = 40
+        GLOBAL_FAISS_INDEX.hnsw.efSearch = 256
+        GLOBAL_FAISS_INDEX.add(_sku_np)
+
+        FAISS_INDEX_MAP = {}
+        FAISS_CATEGORY_TO_CATALOG_INDICES = {}
+
+        _cat_to_indices = defaultdict(list)
+        for _i, _sku in enumerate(CATALOG):
+            _cat_to_indices[_sku.get("category", "")].append(_i)
+
+        for _cat, _indices in _cat_to_indices.items():
+            if not _cat or not _indices:
+                continue
+            _cat_np = _sku_np[np.array(_indices, dtype=np.int64)]
+            _index = faiss.IndexHNSWFlat(dim, 32)
+            _index.hnsw.efConstruction = 40
+            _index.hnsw.efSearch = 256
+            _index.add(_cat_np)
+            FAISS_INDEX_MAP[_cat] = _index
+            FAISS_CATEGORY_TO_CATALOG_INDICES[_cat] = _indices
+
+        print(f"[INIT] ✅ FAISS indexes ready (global + {len(FAISS_INDEX_MAP)} category indexes)")
+    except Exception as e:
+        print(f"[INIT] ⚠️ FAISS index build skipped/failed: {e}")
 
 def embed_text(text: str) -> np.ndarray:
     return MODEL.encode(text, normalize_embeddings=True)
@@ -1952,42 +1996,118 @@ def vector_rank_candidates(item_text: str, candidate_skus: list, top_k: int = 10
     if not candidate_skus:
         return []
     
-    global CANDIDATE_EMBED_CACHE
-    
-    # Create cache key from candidate SKU codes
-    sku_codes = tuple(sorted([c["sku_code"] for c in candidate_skus]))
-    
-    # Check cache for candidate embeddings
-    if sku_codes in CANDIDATE_EMBED_CACHE:
-        candidate_embeddings = CANDIDATE_EMBED_CACHE[sku_codes]
-    else:
-        # Build candidate texts for embedding
-        candidate_texts = []
-        for sku in candidate_skus:
-            specs_text = " ".join(f"{k}:{v}" for k, v in sku.get("specifications", {}).items())
-            full_text = f"{sku.get('product_name', '')} {sku.get('category', '')} {specs_text}"
-            candidate_texts.append(full_text)
-        
-        # Compute and cache embeddings
-        with torch.no_grad():
-            candidate_embeddings = MODEL.encode(candidate_texts, convert_to_tensor=True)
-        CANDIDATE_EMBED_CACHE[sku_codes] = candidate_embeddings
-    
-    # Compute embeddings
     try:
         # Use provided item embedding or compute once
         if item_embedding is None:
             with torch.no_grad():
                 item_embedding = MODEL.encode(item_text, convert_to_tensor=True)
-        
-        # Calculate cosine similarities
-        scores = util.cos_sim(item_embedding, candidate_embeddings)[0]
+
+        global CANDIDATE_EMBED_CACHE, CANDIDATE_FAISS_INDEX_CACHE
+
+        # Detect a single stable domain/category for ANN index selection
+        detected_domain = ""
+        if candidate_skus:
+            detected_domain = candidate_skus[0].get("category", "")
+            if detected_domain and any(s.get("category", "") != detected_domain for s in candidate_skus[:50]):
+                detected_domain = ""
+
+        # Fast path: use global precomputed embeddings if possible
+        _global_indices = []
+        _can_use_global = bool(CATALOG_INDEX_MAP) and SKU_EMBEDDINGS is not None
+        if _can_use_global:
+            for _c in candidate_skus:
+                _code = _c.get("sku_code")
+                _gi = CATALOG_INDEX_MAP.get(_code)
+                if _gi is None:
+                    _can_use_global = False
+                    break
+                _global_indices.append(int(_gi))
+
+        if _can_use_global:
+            candidate_embeddings = SKU_EMBEDDINGS[_global_indices]
+        else:
+            # Fallback to legacy candidate embedding computation (keeps behavior)
+            sku_codes = tuple(sorted([c.get("sku_code") for c in candidate_skus if c.get("sku_code")]))
+            if sku_codes in CANDIDATE_EMBED_CACHE:
+                candidate_embeddings = CANDIDATE_EMBED_CACHE[sku_codes]
+            else:
+                candidate_texts = []
+                for sku in candidate_skus:
+                    specs_text = " ".join(f"{k}:{v}" for k, v in sku.get("specifications", {}).items())
+                    full_text = f"{sku.get('product_name', '')} {sku.get('category', '')} {specs_text}"
+                    candidate_texts.append(full_text)
+                with torch.no_grad():
+                    candidate_embeddings = MODEL.encode(candidate_texts, convert_to_tensor=True)
+                CANDIDATE_EMBED_CACHE[sku_codes] = candidate_embeddings
+
+        # FAISS ANN retrieval (Top-20) to reduce cosine ops
+        _ann_candidates = None
+        if candidate_embeddings is not None and len(candidate_skus) > 0:
+            try:
+                _ann_k = min(20, len(candidate_skus))
+
+                _faiss_entry = None
+
+                # Prefer prebuilt domain/category FAISS index when candidate set is the full category pool
+                if detected_domain and detected_domain in FAISS_INDEX_MAP and detected_domain in FAISS_CATEGORY_TO_CATALOG_INDICES:
+                    try:
+                        _total_in_domain = len(FAISS_CATEGORY_TO_CATALOG_INDICES.get(detected_domain, []))
+                        if _total_in_domain and len(candidate_skus) == _total_in_domain:
+                            _faiss_entry = FAISS_INDEX_MAP.get(detected_domain)
+                    except Exception:
+                        _faiss_entry = None
+
+                # Otherwise, build/reuse a candidate-set FAISS index (post Mongo/spec filtering)
+                if _faiss_entry is None:
+                    sku_codes = tuple(sorted([c.get("sku_code") for c in candidate_skus if c.get("sku_code")]))
+                    _faiss_entry = CANDIDATE_FAISS_INDEX_CACHE.get(sku_codes)
+                    if _faiss_entry is None:
+                        _dim = int(candidate_embeddings.shape[1])
+                        _cand_np = candidate_embeddings.detach().cpu().numpy().astype('float32', copy=False)
+                        _cand_index = faiss.IndexHNSWFlat(_dim, 32)
+                        _cand_index.hnsw.efConstruction = 40
+                        _cand_index.hnsw.efSearch = 256
+                        _cand_index.add(_cand_np)
+                        CANDIDATE_FAISS_INDEX_CACHE[sku_codes] = _cand_index
+                        _faiss_entry = _cand_index
+
+                        # Soft cap to prevent unbounded growth
+                        if len(CANDIDATE_FAISS_INDEX_CACHE) > 64:
+                            try:
+                                CANDIDATE_FAISS_INDEX_CACHE.pop(next(iter(CANDIDATE_FAISS_INDEX_CACHE)))
+                            except Exception:
+                                pass
+
+                _q = item_embedding.detach().cpu().numpy().astype('float32', copy=False)
+                if _q.ndim == 1:
+                    _q = _q.reshape(1, -1)
+                _, _I = _faiss_entry.search(_q, _ann_k)
+                _I = _I[0].tolist() if hasattr(_I, '__len__') else []
+                _ann_candidates = [i for i in _I if isinstance(i, (int, np.integer)) and i >= 0]
+            except Exception:
+                _ann_candidates = None
+
+        if _ann_candidates is None:
+            # Fallback: exact cosine over all candidates
+            scores = util.cos_sim(item_embedding, candidate_embeddings)[0]
+            top_results = torch.topk(scores, k=min(top_k, len(scores)))
+
+            ranked = []
+            for score, idx in zip(top_results.values, top_results.indices):
+                candidate = candidate_skus[int(idx)].copy()
+                candidate["vector_similarity"] = float(score)
+                ranked.append(candidate)
+            return ranked
+
+        # Final cosine re-rank on ANN shortlist only (keeps cosine scoring)
+        _short_embeddings = candidate_embeddings[_ann_candidates]
+        scores = util.cos_sim(item_embedding, _short_embeddings)[0]
         top_results = torch.topk(scores, k=min(top_k, len(scores)))
-        
-        # Return ranked candidates with similarity scores
+
         ranked = []
-        for score, idx in zip(top_results.values, top_results.indices):
-            candidate = candidate_skus[int(idx)].copy()
+        for score, local_idx in zip(top_results.values, top_results.indices):
+            original_idx = _ann_candidates[int(local_idx)]
+            candidate = candidate_skus[int(original_idx)].copy()
             candidate["vector_similarity"] = float(score)
             ranked.append(candidate)
         
@@ -2112,10 +2232,11 @@ def calculate_spec_score(rfp_specs: dict, sku_data: dict, vector_sim: float = 0.
     return final_score
 
 # --- STEP 3: SBERT Helper Function ---
-def find_best_skus_with_sbert(item_text: str, sku_embeddings, catalog: list, top_k: int = 3) -> list:
+def find_best_skus_with_sbert(item_text: str, sku_embeddings, catalog: list, top_k: int = 3, item_embedding=None) -> list:
     """Find best matching SKUs using SBERT cosine similarity"""
     with torch.no_grad():
-        item_embedding = MODEL.encode(item_text, convert_to_tensor=True)
+        if item_embedding is None:
+            item_embedding = MODEL.encode(item_text, convert_to_tensor=True)
     scores = util.cos_sim(item_embedding, sku_embeddings)[0]
     top_results = torch.topk(scores, k=min(top_k, len(scores)))
 
@@ -2536,6 +2657,74 @@ def technical_agent_node(state: RFPState) -> RFPState:
         
         # STEP 2.5: Use category-specific candidates or fallback to get_candidate_skus
         final_candidates = candidate_skus if candidate_skus else get_candidate_skus(structured_specs)
+
+        # STEP 2.6: Mongo spec filter first (performance only)
+        # Filter large candidate pools using structured specs extracted from RFP text.
+        # Safe fallback: if filtering becomes too narrow, keep original pool.
+        try:
+            if final_candidates and len(final_candidates) > 500:
+                _rfp_voltage = str(structured_specs.get("voltage", "") or "").lower().strip()
+                _rfp_material = str(structured_specs.get("material", "") or structured_specs.get("conductor_material", "") or structured_specs.get("material_type", "") or "").lower().strip()
+                _rfp_insulation = str(structured_specs.get("insulation", "") or structured_specs.get("insulation_type", "") or "").lower().strip()
+                _rfp_size_sqmm = str(structured_specs.get("size_sqmm", "") or "").lower().strip()
+
+                _rfp_voltage_num = None
+                if _rfp_voltage:
+                    _vm = re.search(r'(\d+(?:\.\d+)?)', _rfp_voltage)
+                    if _vm:
+                        _rfp_voltage_num = _vm.group(1)
+
+                _rfp_size_num = None
+                if _rfp_size_sqmm:
+                    _sm = re.search(r'(\d+(?:\.\d+)?)', _rfp_size_sqmm)
+                    if _sm:
+                        _rfp_size_num = _sm.group(1)
+
+                if _rfp_voltage_num or _rfp_material or _rfp_insulation or _rfp_size_num:
+                    _filtered_candidates = []
+                    for _sku in final_candidates:
+                        _sku_name = str(_sku.get("product_name", "") or "").lower()
+                        _sku_cat = str(_sku.get("category", "") or "").lower()
+                        _sku_specs = _sku.get("specifications", {}) or {}
+                        _sku_voltage = str(_sku_specs.get("voltage", "") or "").lower()
+                        _sku_material = str(_sku_specs.get("conductor_material", "") or _sku_specs.get("material", "") or "").lower()
+                        _sku_insulation = str(_sku_specs.get("insulation_type", "") or _sku_specs.get("insulation", "") or "").lower()
+                        _sku_size = str(_sku_specs.get("size_sqmm", "") or _sku_specs.get("size", "") or "").lower()
+                        _sku_text = f"{_sku_name} {_sku_cat} {_sku_voltage} {_sku_material} {_sku_insulation} {_sku_size}"
+
+                        # Voltage filter (if specified)
+                        if _rfp_voltage_num:
+                            _vp = rf'\b{re.escape(_rfp_voltage_num)}\s*k?v\b'
+                            if not re.search(_vp, _sku_text):
+                                continue
+
+                        # Material filter (if specified)
+                        if _rfp_material:
+                            if any(k in _rfp_material for k in ["copper", "cu"]):
+                                if not any(k in _sku_text for k in ["copper", "cu"]):
+                                    continue
+                            elif any(k in _rfp_material for k in ["aluminium", "aluminum", "al"]):
+                                if not any(k in _sku_text for k in ["alumin", "al "]):
+                                    continue
+
+                        # Insulation filter (if specified)
+                        if _rfp_insulation:
+                            if _rfp_insulation not in _sku_text:
+                                continue
+
+                        # Size filter (if specified)
+                        if _rfp_size_num:
+                            _sp = rf'\b{re.escape(_rfp_size_num)}\b'
+                            if not re.search(_sp, _sku_text):
+                                continue
+
+                        _filtered_candidates.append(_sku)
+
+                    if _filtered_candidates and len(_filtered_candidates) >= 10:
+                        print(f"[Technical Agent] 🔎 Mongo spec filter: {len(final_candidates)} → {len(_filtered_candidates)} SKUs")
+                        final_candidates = _filtered_candidates
+        except Exception:
+            pass
         
         # ============================
         # HARD SPEC FILTERING (Gmail RFP Precision)

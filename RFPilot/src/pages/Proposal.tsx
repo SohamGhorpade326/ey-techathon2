@@ -41,7 +41,19 @@ import {
   Paperclip,
 } from "lucide-react";
 import jsPDF from "jspdf";
-import { Document, Packer, Paragraph, TextRun } from "docx";
+import { 
+  Document, 
+  Packer, 
+  Paragraph, 
+  TextRun, 
+  AlignmentType, 
+  HeadingLevel,
+  BorderStyle,
+  PageNumber,
+  Header,
+  Footer,
+  PageBreak
+} from "docx";
 
 const API = "http://127.0.0.1:8000";
 
@@ -53,6 +65,7 @@ const versions = [
 
 export default function Proposal() {
   const [coverContent, setCoverContent] = useState("");
+  const [originalBidContent, setOriginalBidContent] = useState(""); // Store original bid content separately
   const [editableBidContent, setEditableBidContent] = useState("");
   const [complianceItems, setComplianceItems] = useState<any[]>([]);
   const [pricingTotals, setPricingTotals] = useState<any>(null);
@@ -89,7 +102,8 @@ export default function Proposal() {
         // Format proposal content professionally
         const rawProposal = proposalData.proposal || "";
         const formattedProposal = formatProposalText(rawProposal);
-        setCoverContent(formattedProposal);
+        setOriginalBidContent(formattedProposal); // Store original bid content
+        setCoverContent(formattedProposal); // Initially show bid as cover too
         setEditableBidContent(formattedProposal); // Initialize editable content
         setComplianceItems(complianceData);
         setPricingTotals(totalsData);
@@ -146,7 +160,7 @@ export default function Proposal() {
 
   // Update bid content with dynamic discount information
   useEffect(() => {
-    if (!coverContent || !pricingItems || pricingItems.length === 0) return;
+    if (!originalBidContent || !pricingItems || pricingItems.length === 0) return;
     
     // Calculate subtotal
     const subtotal = pricingItems.reduce((sum, item) => sum + (item.selling_price || item.line_total || 0), 0);
@@ -158,26 +172,26 @@ export default function Proposal() {
     // Find and replace the total bid value line in the bid content
     const totalBidRegex = /(?:Subtotal \(Based on Technical Configuration & Margin Analysis\): ₹[\d,]+\.?\d*\n\nDiscount Applied: [\d.]+% discount has been applied to the subtotal, resulting in a discount of ₹[\d,]+\.?\d*\.\n\n)?The (?:final )?(?:total )?bid value amounts to ₹[\d,]+\.?\d*/;
     
-    let updatedContent = coverContent;
+    let updatedContent = originalBidContent;
     
     if (discountApplied && discount > 0) {
       // Replace with discount breakdown
       const discountText = `Subtotal (Based on Technical Configuration & Margin Analysis): ₹${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\nDiscount Applied: ${discount}% discount has been applied to the subtotal, resulting in a discount of ₹${discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.\n\nThe final bid value amounts to ₹${finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
       
-      updatedContent = coverContent.replace(
+      updatedContent = originalBidContent.replace(
         totalBidRegex,
         discountText
       );
     } else {
       // No discount - just update the subtotal value
-      updatedContent = coverContent.replace(
+      updatedContent = originalBidContent.replace(
         totalBidRegex,
         `The total bid value amounts to ₹${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
       );
     }
     
     setEditableBidContent(updatedContent);
-  }, [discountApplied, discount, coverContent, pricingItems]);
+  }, [discountApplied, discount, originalBidContent, pricingItems]);
 
   const formatProposalText = (text: string): string => {
     // Split into paragraphs and format professionally
@@ -284,7 +298,7 @@ export default function Proposal() {
   };
 
   const handleResetCoverLetter = () => {
-    setCoverContent("");
+    setCoverContent(originalBidContent); // Reset to original bid content
     setCoverLetterMode("initial");
   };
 
@@ -397,6 +411,8 @@ export default function Proposal() {
   const handleExportPDF = () => {
     try {
       const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
       
       // Use the current editable content instead of coverContent
       const contentToExport = editableBidContent || coverContent;
@@ -404,66 +420,155 @@ export default function Proposal() {
       // Text sanitization helper
       const cleanText = (t: string) =>
         t
-          .replace(/₹/g, "Rs.")  // Replace rupee symbol with ASCII equivalent
+          .replace(/₹/g, "Rs.")
           .replace(/['']/g, "'")
           .replace(/[""]/g, '"')
           .replace(/[–—]/g, "-")
           .replace(/[\u0080-\uFFFF]/g, (char) => {
-            // Replace any remaining non-ASCII characters
             const code = char.charCodeAt(0);
             if (code > 127) return "";
             return char;
           })
           .normalize("NFKD")
-          .replace(/[\u0300-\u036f]/g, ""); // Remove combining diacritical marks
+          .replace(/[\u0300-\u036f]/g, "");
       
-      // Force consistent font globally
-      pdf.setFont("helvetica", "normal");
+      // ============== COVER PAGE ==============
+      // Header bar with company color
+      pdf.setFillColor(41, 98, 255); // Professional blue
+      pdf.rect(0, 0, pageWidth, 60, 'F');
       
-      // Title section
-      pdf.setFontSize(18);
+      // Company name/logo area
+      pdf.setFontSize(28);
       pdf.setFont("helvetica", "bold");
-      pdf.text(cleanText("BID RESPONSE"), 105, 20, { align: "center" });
+      pdf.setTextColor(255, 255, 255);
+      pdf.text("RFP BID PROPOSAL", pageWidth / 2, 30, { align: "center" });
+      
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("Technical & Commercial Submission", pageWidth / 2, 45, { align: "center" });
+      
+      // Central info box
+      pdf.setFillColor(245, 247, 250);
+      pdf.rect(25, 80, pageWidth - 50, 80, 'F');
+      pdf.setDrawColor(41, 98, 255);
+      pdf.setLineWidth(0.5);
+      pdf.rect(25, 80, pageWidth - 50, 80, 'S');
+      
+      pdf.setFontSize(14);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(0, 0, 0);
+      pdf.text("RFP REFERENCE", pageWidth / 2, 95, { align: "center" });
       
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "normal");
-      pdf.text(cleanText("RFP Reference: RFP/SEB/2024/1023"), 105, 28, { align: "center" });
+      pdf.text("RFP/SEB/2024/1023", pageWidth / 2, 105, { align: "center" });
       
-      
-      pdf.line(15, 40, 195, 40);
-      
-      // Content
-      pdf.setFont("helvetica", "normal");
       pdf.setFontSize(10);
-      let yPosition = 50;
+      pdf.text("State Electricity Board", pageWidth / 2, 115, { align: "center" });
+      pdf.text("Power Cable Supply", pageWidth / 2, 122, { align: "center" });
+      
+      pdf.setFontSize(9);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`Submitted on: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}`, pageWidth / 2, 140, { align: "center" });
+      pdf.text(`Document Version: 1.0`, pageWidth / 2, 148, { align: "center" });
+      
+      // Confidentiality notice
+      pdf.setFillColor(255, 243, 224);
+      pdf.rect(25, 180, pageWidth - 50, 30, 'F');
+      pdf.setDrawColor(255, 179, 71);
+      pdf.rect(25, 180, pageWidth - 50, 30, 'S');
+      
+      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(204, 85, 0);
+      pdf.text("CONFIDENTIAL DOCUMENT", pageWidth / 2, 190, { align: "center" });
+      
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.text("This document contains proprietary information and is intended solely for the addressee.", pageWidth / 2, 197, { align: "center" });
+      pdf.text("Unauthorized distribution or copying is strictly prohibited.", pageWidth / 2, 203, { align: "center" });
+      
+      // Footer on cover page
+      pdf.setFontSize(8);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text("Prepared by: Master Agent AI System", pageWidth / 2, pageHeight - 15, { align: "center" });
+      
+      // ============== CONTENT PAGES ==============
+      pdf.addPage();
+      
+      const margin = 20;
+      const maxWidth = pageWidth - (margin * 2);
+      let yPosition = margin + 10;
       const lineHeight = 6;
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 15;
-      const maxWidth = 180;
       
       const paragraphs = contentToExport.split('\n\n');
       
-      paragraphs.forEach((paragraph) => {
+      paragraphs.forEach((paragraph, index) => {
         const cleanedParagraph = cleanText(paragraph);
         const lines = pdf.splitTextToSize(cleanedParagraph, maxWidth);
         
+        // Check if we need a new page
+        if (yPosition + (lines.length * lineHeight) > pageHeight - 30) {
+          pdf.addPage();
+          yPosition = margin + 10;
+        }
+        
+        // Set font for content
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+        pdf.setTextColor(0, 0, 0);
+        
         lines.forEach((line: string) => {
-          if (yPosition > pageHeight - 20) {
-            pdf.addPage();
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(10);
-            yPosition = 20;
-          }
           pdf.text(line, margin, yPosition);
           yPosition += lineHeight;
         });
         
-        yPosition += 4; // Extra spacing between paragraphs
+        yPosition += 5; // Extra spacing between paragraphs
       });
       
-      pdf.save("proposal.pdf");
+      // ============== ADD HEADERS & FOOTERS TO ALL PAGES ==============
+      const pageCount = pdf.getNumberOfPages();
+      
+      for (let i = 2; i <= pageCount; i++) {
+        pdf.setPage(i);
+        
+        // Header
+        pdf.setDrawColor(200, 200, 200);
+        pdf.setLineWidth(0.5);
+        pdf.line(margin, 15, pageWidth - margin, 15);
+        
+        pdf.setFontSize(8);
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(100, 100, 100);
+        pdf.text("RFP Bid Proposal - RFP/SEB/2024/1023", margin, 12);
+        pdf.text("CONFIDENTIAL", pageWidth - margin, 12, { align: "right" });
+        
+        // Footer
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+        
+        pdf.setFontSize(8);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(`Page ${i - 1} of ${pageCount - 1}`, pageWidth / 2, pageHeight - 10, { align: "center" });
+        pdf.text(new Date().toLocaleDateString('en-IN'), margin, pageHeight - 10);
+        pdf.text("Master Agent AI", pageWidth - margin, pageHeight - 10, { align: "right" });
+      }
+      
+      pdf.save(`RFP_Bid_Proposal_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      toast({
+        title: "PDF Exported",
+        description: "Your professional bid proposal has been downloaded.",
+        duration: 3000,
+      });
     } catch (error) {
       console.error("Error generating PDF:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
     }
   };
 
@@ -473,73 +578,347 @@ export default function Proposal() {
       const contentToExport = editableBidContent || coverContent;
       const paragraphs = contentToExport.split('\n\n').filter(p => p.trim().length > 0);
       
+      const currentDate = new Date().toLocaleDateString('en-IN', { 
+        day: '2-digit', 
+        month: 'long', 
+        year: 'numeric' 
+      });
+      
       const doc = new Document({
-        sections: [{
-          properties: {},
-          children: [
-            // Title
-            new Paragraph({
-              children: [new TextRun({
-                text: "BID RESPONSE",
-                bold: true,
-                size: 32,
-              })],
-              alignment: "center" as any,
-              spacing: { after: 200 },
-            }),
-            // Subtitle
-            new Paragraph({
-              children: [new TextRun({
-                text: "RFP Reference: RFP/SEB/2024/1023",
-                size: 22,
-              })],
-              alignment: "center" as any,
-              spacing: { after: 100 },
-            }),
-            new Paragraph({
-              children: [new TextRun({
-                text: "State Electricity Board - Power Cable Supply",
-                size: 22,
-              })],
-              alignment: "center" as any,
-              spacing: { after: 400 },
-              border: {
-                bottom: {
-                  color: "000000",
-                  space: 1,
-                  style: "single" as any,
-                  size: 6,
+        sections: [
+          // ============== COVER PAGE ==============
+          {
+            properties: {
+              page: {
+                margin: {
+                  top: 1440,
+                  right: 1440,
+                  bottom: 1440,
+                  left: 1440,
                 },
               },
-            }),
-            // Content paragraphs
-            ...paragraphs.map(para => 
+            },
+            children: [
+              // Header block with blue background (simulated with border)
               new Paragraph({
-                children: [new TextRun({
-                  text: para,
-                  size: 22,
-                })],
-                spacing: { 
-                  after: 240,
-                  line: 360,
+                children: [
+                  new TextRun({
+                    text: "RFP BID PROPOSAL",
+                    bold: true,
+                    size: 48,
+                    color: "2962FF",
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 1000, after: 200 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Technical & Commercial Submission",
+                    size: 24,
+                    color: "2962FF",
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 600 },
+              }),
+              
+              // RFP Information Box
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "RFP REFERENCE",
+                    bold: true,
+                    size: 28,
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 400, after: 200 },
+                border: {
+                  top: { style: BorderStyle.SINGLE, size: 20, color: "2962FF" },
+                  bottom: { style: BorderStyle.SINGLE, size: 20, color: "2962FF" },
+                  left: { style: BorderStyle.SINGLE, size: 20, color: "2962FF" },
+                  right: { style: BorderStyle.SINGLE, size: 20, color: "2962FF" },
                 },
-              })
-            ),
-          ],
-        }],
+                shading: {
+                  fill: "F5F7FA",
+                },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "RFP/SEB/2024/1023",
+                    size: 24,
+                    bold: true,
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 100 },
+                shading: {
+                  fill: "F5F7FA",
+                },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "State Electricity Board",
+                    size: 22,
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 50 },
+                shading: {
+                  fill: "F5F7FA",
+                },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Power Cable Supply",
+                    size: 22,
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 200 },
+                shading: {
+                  fill: "F5F7FA",
+                },
+                border: {
+                  bottom: { style: BorderStyle.SINGLE, size: 20, color: "2962FF" },
+                  left: { style: BorderStyle.SINGLE, size: 20, color: "2962FF" },
+                  right: { style: BorderStyle.SINGLE, size: 20, color: "2962FF" },
+                },
+              }),
+              
+              // Document metadata
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `Submitted on: ${currentDate}`,
+                    size: 20,
+                    color: "666666",
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 400, after: 100 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Document Version: 1.0",
+                    size: 20,
+                    color: "666666",
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 600 },
+              }),
+              
+              // Confidentiality notice
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "CONFIDENTIAL DOCUMENT",
+                    bold: true,
+                    size: 20,
+                    color: "CC5500",
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 400, after: 100 },
+                border: {
+                  top: { style: BorderStyle.SINGLE, size: 15, color: "FFB347" },
+                  bottom: { style: BorderStyle.SINGLE, size: 15, color: "FFB347" },
+                  left: { style: BorderStyle.SINGLE, size: 15, color: "FFB347" },
+                  right: { style: BorderStyle.SINGLE, size: 15, color: "FFB347" },
+                },
+                shading: {
+                  fill: "FFF3E0",
+                },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "This document contains proprietary information and is intended solely for the addressee.",
+                    size: 16,
+                    color: "CC5500",
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 50 },
+                shading: {
+                  fill: "FFF3E0",
+                },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Unauthorized distribution or copying is strictly prohibited.",
+                    size: 16,
+                    color: "CC5500",
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 100 },
+                shading: {
+                  fill: "FFF3E0",
+                },
+                border: {
+                  bottom: { style: BorderStyle.SINGLE, size: 15, color: "FFB347" },
+                  left: { style: BorderStyle.SINGLE, size: 15, color: "FFB347" },
+                  right: { style: BorderStyle.SINGLE, size: 15, color: "FFB347" },
+                },
+              }),
+              
+              // Footer text
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Prepared by: Master Agent AI System",
+                    size: 18,
+                    color: "999999",
+                    italics: true,
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 1200 },
+              }),
+              
+              // Page break to content
+              new Paragraph({
+                children: [new PageBreak()],
+              }),
+            ],
+          },
+          
+          // ============== CONTENT PAGES ==============
+          {
+            properties: {
+              page: {
+                margin: {
+                  top: 1440,
+                  right: 1440,
+                  bottom: 1440,
+                  left: 1440,
+                },
+              },
+            },
+            headers: {
+              default: new Header({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: "RFP Bid Proposal - RFP/SEB/2024/1023",
+                        size: 18,
+                        color: "666666",
+                      }),
+                      new TextRun({
+                        text: "                                    CONFIDENTIAL",
+                        size: 18,
+                        color: "666666",
+                        bold: true,
+                      }),
+                    ],
+                    border: {
+                      bottom: { style: BorderStyle.SINGLE, size: 6, color: "CCCCCC" },
+                    },
+                    spacing: { after: 200 },
+                  }),
+                ],
+              }),
+            },
+            footers: {
+              default: new Footer({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: currentDate,
+                        size: 18,
+                        color: "666666",
+                      }),
+                      new TextRun({
+                        text: "                    Page ",
+                        size: 18,
+                        color: "666666",
+                      }),
+                      new TextRun({
+                        children: [PageNumber.CURRENT],
+                        size: 18,
+                        color: "666666",
+                      }),
+                      new TextRun({
+                        text: " of ",
+                        size: 18,
+                        color: "666666",
+                      }),
+                      new TextRun({
+                        children: [PageNumber.TOTAL_PAGES],
+                        size: 18,
+                        color: "666666",
+                      }),
+                      new TextRun({
+                        text: "                    Master Agent AI",
+                        size: 18,
+                        color: "666666",
+                      }),
+                    ],
+                    border: {
+                      top: { style: BorderStyle.SINGLE, size: 6, color: "CCCCCC" },
+                    },
+                    spacing: { before: 200 },
+                  }),
+                ],
+              }),
+            },
+            children: [
+              // Content paragraphs with professional formatting
+              ...paragraphs.map((para, index) => 
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: para,
+                      size: 22,
+                      font: "Calibri",
+                    }),
+                  ],
+                  spacing: { 
+                    after: 280,
+                    line: 360,
+                  },
+                  alignment: AlignmentType.JUSTIFIED,
+                })
+              ),
+            ],
+          },
+        ],
       });
       
       const blob = await Packer.toBlob(doc);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "proposal.docx";
+      link.download = `RFP_Bid_Proposal_${new Date().toISOString().split('T')[0]}.docx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Word Document Exported",
+        description: "Your professional bid proposal has been downloaded.",
+        duration: 3000,
+      });
     } catch (error) {
       console.error("Error generating Word document:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate Word document. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
     }
   };
 

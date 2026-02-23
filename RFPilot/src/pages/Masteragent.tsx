@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Groq from "groq-sdk";
+import jsPDF from "jspdf";
 import { 
   Cpu, 
   DollarSign, 
@@ -37,6 +38,28 @@ export default function Masteragent() {
   const [isSkipping, setIsSkipping] = useState(false);
   const navigate = useNavigate();
 
+  // Helper function to clean text for display and PDF
+  const cleanTextForDisplay = (text: string): string => {
+    return text
+      .replace(/₹/g, 'INR ')
+      .replace(/\u20b9/g, 'INR ')
+      .replace(/[^\x00-\x7F\n\r]/g, ' ')  // Keep newlines
+      .replace(/[^\S\r\n]+/g, ' ')  // Normalize spaces but keep newlines
+      .replace(/(\d)\s+(?=\d)/g, '$1')
+      .trim();
+  };
+
+  // Helper to clean single values (no newlines)
+  const cleanValue = (text: string): string => {
+    return text
+      .replace(/₹/g, 'INR ')
+      .replace(/\u20b9/g, 'INR ')
+      .replace(/[^\x00-\x7F]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/(\d)\s+(?=\d)/g, '$1')
+      .trim();
+  };
+
   useEffect(() => {
     fetch("http://127.0.0.1:8000/master/output")
       .then((res) => res.json())
@@ -55,40 +78,45 @@ export default function Masteragent() {
         messages: [
           { 
             role: "system", 
-            content: "You are a senior RFP strategist with deep expertise in technical and commercial analysis. Provide detailed, professional strategic analysis WITHOUT using any markdown formatting (no **, ###, or other symbols). Use plain text with proper section headers and indentation. Write in clear, professional language with comprehensive insights." 
+            content: "You are a senior RFP strategist with deep expertise in technical and commercial analysis. Provide comprehensive, detailed strategic analysis in flowing PARAGRAPH format WITHOUT using any markdown formatting (no **, ###, bullets, or numbered lists). Write in clear, professional language as cohesive paragraphs with natural transitions. IMPORTANT: Use 'INR' or 'Rupees' instead of currency symbols. Avoid special Unicode characters. Use only standard ASCII characters for better compatibility." 
           },
           { 
             role: "user", 
-            content: `Provide a detailed strategic analysis of this Master Agent payload. Format as plain text without markdown symbols. Structure your analysis in 3-4 comprehensive paragraphs covering:
+            content: `Generate a comprehensive strategic analysis report for this Master Agent payload in flowing paragraph format. Write as a professional narrative report with well-structured paragraphs covering the following areas:
 
-1. EXECUTIVE OVERVIEW (Paragraph 1):
-   - Detailed overview of the RFP including ID, issuing organization, and scope
-   - Project value range and commercial significance
-   - Submission deadline with urgency assessment
-   - High-level technical focus areas and domain complexity
+EXECUTIVE SUMMARY: Write a comprehensive opening paragraph that provides a complete overview of the RFP including the RFP ID, issuing organization, and full project title. Seamlessly integrate details about the project scope including all material types and categories involved. Discuss the project value range with commercial significance analysis, and explain the submission deadline along with an urgency assessment and preparation timeline. Conclude this section with high-level technical focus areas, domain complexity evaluation, and a clear strategic recommendation on whether to bid or not bid with detailed rationale.
 
-2. TECHNICAL REQUIREMENTS AND COMPLIANCE RISKS (Paragraph 2):
-   - Detailed breakdown of technical specifications and requirements
-   - Scope items with technical complexity analysis
-   - Key compliance standards and testing requirements
-   - Potential technical risks and mitigation considerations
-   - Quality assurance and acceptance criteria
+TECHNICAL REQUIREMENTS ANALYSIS: Write several detailed paragraphs analyzing the technical aspects. Start with a comprehensive breakdown of all technical specifications and a detailed analysis of scope items and quantities. Continue with a technical complexity assessment for each requirement, discussing the required testing standards and quality protocols. Flow into compliance requirements and regulatory considerations, material specifications, and acceptance criteria. Conclude with technical risks identification including severity ratings, proposed mitigation strategies for each risk, and resource requirements covering personnel, equipment, and facilities.
 
-3. PRICING CONSTRAINTS AND ALIGNMENT (Paragraph 3):
-   - Pricing methodology and risk thresholds
-   - Material and testing cost considerations
-   - Budget alignment with technical requirements
-   - Commercial terms and payment structures
-   - Recommendations for competitive positioning
+PRICING AND COMMERCIAL ANALYSIS: Develop multiple paragraphs covering the financial aspects. Begin with a detailed pricing methodology breakdown and risk buffer analysis (noting the ${data.pricing_summary?.pricing_rules?.risk_threshold_percent}% threshold). Discuss material sourcing strategy and cost implications, followed by testing and quality assurance cost considerations. Address currency and payment terms analysis, budget alignment with technical requirements, and competitive positioning recommendations. End with profit margin projections, sensitivity analysis, and cost optimization opportunities.
 
-Provide deep professional insights without using markdown formatting. Use clear section headers and detailed analysis in each paragraph.
+CAPABILITY ASSESSMENT: Write paragraphs evaluating organizational readiness. Discuss internal capability mapping against requirements and provide a thorough gap analysis for missing capabilities. Address partner or subcontractor needs identification, resource availability and allocation requirements. Cover timeline feasibility analysis and capacity constraints or bottlenecks that may impact delivery.
 
-Master Agent Data: ${JSON.stringify(data)}` 
+STRATEGIC RECOMMENDATIONS: Compose detailed paragraphs providing actionable guidance. Present detailed bid strategy recommendations and competitive differentiation opportunities. Discuss value engineering suggestions and a comprehensive risk mitigation action plan. Outline key success factors for winning, implementation timeline with milestones, and decision checkpoints with contingency plans.
+
+RISK ASSESSMENT: Write flowing paragraphs analyzing all risk dimensions. Discuss technical risks with probability and impact ratings, followed by commercial risks and mitigation approaches. Address schedule risks and contingency buffers, compliance and regulatory risks, culminating in an overall risk profile assessment (Low, Medium, or High).
+
+NEXT STEPS AND ACTION ITEMS: Conclude with paragraphs outlining the path forward. Detail immediate actions required within 48 hours, short-term tasks for the next 1-2 weeks, and long-term preparation items. Discuss the stakeholder engagement plan and document preparation checklist needed for bid submission.
+
+Write each section as flowing, connected paragraphs with smooth transitions. Provide extremely detailed professional insights with specific data points and actionable recommendations throughout. Make the report read like a professional consulting document with natural narrative flow.
+
+FORMATTING RULES:
+- Separate each major section with a blank line (use double line breaks between sections)
+- Within each section, separate distinct paragraphs with a blank line
+- Write in paragraph format with proper spacing between paragraphs
+- Write currency amounts as: INR 15,00,000 to INR 22,00,000 (no currency symbols)
+- Write numbers normally without extra spaces: 15,00,000 NOT 1 5, 0 0, 0 0 0
+- Use only standard English characters (A-Z, a-z, 0-9, and basic punctuation)
+- Avoid special Unicode characters and symbols
+- No bullet points or numbered lists - only flowing paragraphs
+- Each major topic (Executive Summary, Technical Requirements, etc.) should be its own paragraph group separated by blank lines
+
+Master Agent Data: ${JSON.stringify(data, null, 2)}` 
           }
         ],
         model: "llama-3.3-70b-versatile",
-        temperature: 0.5,
-        max_tokens: 1500,
+        temperature: 0.7,
+        max_tokens: 4096,
       });
       setAiSummary(completion.choices[0]?.message?.content || "");
     } catch (err) {
@@ -96,6 +124,182 @@ Master Agent Data: ${JSON.stringify(data)}`
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const downloadReport = () => {
+    if (!aiSummary) return;
+
+    const cleanedSummary = cleanTextForDisplay(aiSummary);
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    const maxWidth = pageWidth - (margin * 2);
+    let yPosition = margin;
+
+    // Header
+    pdf.setFillColor(99, 102, 241); // Indigo background
+    pdf.rect(0, 0, pageWidth, 40, 'F');
+    
+    pdf.setFontSize(22);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(255, 255, 255);
+    pdf.text('RFP STRATEGIC ANALYSIS REPORT', pageWidth / 2, 20, { align: 'center' });
+    
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('Generated by Master Agent AI', pageWidth / 2, 30, { align: 'center' });
+    
+    yPosition = 50;
+
+    // RFP Metadata Box
+    pdf.setDrawColor(99, 102, 241);
+    pdf.setLineWidth(0.5);
+    pdf.rect(margin, yPosition, maxWidth, 45, 'S');
+    
+    yPosition += 7;
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(99, 102, 241);
+    pdf.text('RFP INFORMATION', margin + 5, yPosition);
+    
+    yPosition += 7;
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(0, 0, 0);
+    
+    const metadata = [
+      `RFP ID: ${cleanValue(data.technical_summary?.rfp_context?.rfp_id || 'N/A')}`,
+      `Title: ${cleanValue(data.technical_summary?.rfp_context?.title || 'N/A')}`,
+      `Buyer: ${cleanValue(data.technical_summary?.rfp_context?.buyer || 'N/A')}`,
+      `Domain: ${cleanValue(data.technical_summary?.rfp_context?.domain || 'N/A')}`,
+      `Deadline: ${cleanValue(data.technical_summary?.rfp_context?.deadline || 'N/A')}`,
+      `Estimated Value: ${cleanValue(data.technical_summary?.rfp_context?.estimated_value || 'N/A')}`,
+      `Priority: ${cleanValue(data.technical_summary?.rfp_context?.priority || 'N/A')}`
+    ];
+    
+    metadata.forEach(item => {
+      if (yPosition > pageHeight - margin - 10) {
+        pdf.addPage();
+        yPosition = margin;
+      }
+      pdf.text(item, margin + 5, yPosition);
+      yPosition += 4.5;
+    });
+    
+    yPosition += 10;
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(`Generation Date: ${new Date().toLocaleString()}`, margin, yPosition);
+    
+    yPosition += 10;
+
+    // AI-Generated Content
+    pdf.setDrawColor(200, 200, 200);
+    pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+    yPosition += 8;
+
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(147, 51, 234); // Purple
+    pdf.text('AI-GENERATED STRATEGIC ANALYSIS', margin, yPosition);
+    yPosition += 8;
+
+    // Add the AI summary content with proper paragraph spacing
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(0, 0, 0);
+    
+    // Split by double newlines for paragraphs, or single newlines
+    const paragraphs = cleanedSummary.split(/\n\n+/).filter(p => p.trim());
+    
+    paragraphs.forEach((paragraph, index) => {
+      if (paragraph.trim()) {
+        const lines = pdf.splitTextToSize(paragraph.trim(), maxWidth);
+        lines.forEach((line: string) => {
+          if (yPosition > pageHeight - margin - 10) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+          pdf.text(line, margin, yPosition);
+          yPosition += 5;
+        });
+        // Add extra space between paragraphs (but not after the last one)
+        if (index < paragraphs.length - 1) {
+          yPosition += 4;
+        }
+      }
+    });
+
+    // Footer section
+    yPosition += 10;
+    if (yPosition > pageHeight - 60) {
+      pdf.addPage();
+      yPosition = margin;
+    }
+
+    pdf.setDrawColor(200, 200, 200);
+    pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+    yPosition += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(99, 102, 241);
+    pdf.text('REPORT METADATA', margin, yPosition);
+    yPosition += 6;
+
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(0, 0, 0);
+    const metadataInfo = [
+      '• Generated by: Master Agent AI (Groq LLM)',
+      '• Model: llama-3.3-70b-versatile',
+      '• Analysis Type: Comprehensive Strategic Assessment',
+      '• Report Version: 1.0'
+    ];
+    metadataInfo.forEach(info => {
+      pdf.text(info, margin + 5, yPosition);
+      yPosition += 5;
+    });
+
+    yPosition += 8;
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(220, 38, 38); // Red
+    pdf.text('DISCLAIMER', margin, yPosition);
+    yPosition += 6;
+
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(0, 0, 0);
+    const disclaimer = 'This report is generated by AI and should be reviewed by qualified professionals before making final bid decisions. All recommendations are based on available data and should be validated against current market conditions and organizational capabilities.';
+    const disclaimerLines = pdf.splitTextToSize(disclaimer, maxWidth);
+    disclaimerLines.forEach((line: string) => {
+      if (yPosition > pageHeight - margin - 5) {
+        pdf.addPage();
+        yPosition = margin;
+      }
+      pdf.text(line, margin, yPosition);
+      yPosition += 4;
+    });
+
+    // Add page numbers
+    const pageCount = pdf.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text(`Page ${i} of ${pageCount}`, pageWidth - margin - 20, pageHeight - 10);
+    }
+
+    // Save the PDF
+    pdf.save(`RFP_Strategic_Analysis_${data.technical_summary?.rfp_context?.rfp_id || 'Report'}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const handleStrategicSkip = async () => {
@@ -202,8 +406,8 @@ Master Agent Data: ${JSON.stringify(data)}`
             Generate Strategic AI Overview
           </Button>
           {aiSummary && (
-            <Button variant="outline" size="sm" onClick={() => window.print()}>
-              <Download className="mr-2 h-4 w-4" /> Export Report
+            <Button variant="outline" size="sm" onClick={downloadReport}>
+              <Download className="mr-2 h-4 w-4" /> Download AI Report
             </Button>
           )}
           {/* STRATEGIC SKIP BUTTON */}
@@ -416,7 +620,7 @@ Master Agent Data: ${JSON.stringify(data)}`
                 <h3>Strategic Executive Overview</h3>
               </div>
               <div className="text-sm leading-relaxed text-slate-200 prose prose-invert max-w-none whitespace-pre-wrap">
-                {aiSummary}
+                {aiSummary ? cleanTextForDisplay(aiSummary) : aiSummary}
               </div>
             </motion.div>
           )}

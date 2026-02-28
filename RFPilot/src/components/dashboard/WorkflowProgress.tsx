@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Search, Cpu, DollarSign, FileText, Send, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useT";
 
 interface WorkflowStep {
   id: string;
@@ -9,15 +10,16 @@ interface WorkflowStep {
   status: "completed" | "active" | "pending";
 }
 
-const steps: WorkflowStep[] = [
-  { id: "find", name: "Find RFP", icon: Search, status: "completed" },
-  { id: "specs", name: "Specs Match", icon: Cpu, status: "completed" },
-  { id: "pricing", name: "Pricing", icon: DollarSign, status: "active" },
-  { id: "proposal", name: "Proposal", icon: FileText, status: "pending" },
-  { id: "submit", name: "Submit", icon: Send, status: "pending" },
-];
-
 export function WorkflowProgress() {
+  const { t } = useT();
+
+  const steps: WorkflowStep[] = [
+    { id: "find", name: t("Workflow.find","Find RFP"), icon: Search, status: "completed" },
+    { id: "specs", name: t("Workflow.specs","Specs Match"), icon: Cpu, status: "completed" },
+    { id: "pricing", name: t("Workflow.pricing","Pricing"), icon: DollarSign, status: "active" },
+    { id: "proposal", name: t("Workflow.proposal","Proposal"), icon: FileText, status: "pending" },
+    { id: "submit", name: t("Workflow.submit","Submit"), icon: Send, status: "pending" },
+  ];
   return (
     <motion.div
       initial={{ opacity: 0, y: -10 }}

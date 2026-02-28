@@ -1,0 +1,18 @@
+{
+  "TopBar.searchPlaceholder": "आरएफपी, एसक्यू शोधा...",
+  "TopBar.loggedInAs": "याप्रमाणे लॉग इन करा:",
+  "TopBar.logout": "लॉगआउट",
+  "StrategicInsights.title": "धोरणात्मक",
+  "StrategicInsights.winProbabilityPredictor": "विजय संभाव्यता अंदाज",
+  "StrategicInsights.winProbabilityDesc": "वर्तमान आरएफपी आणि ऐतिहासिक कामगिरीवर आधा",
+  "StrategicInsights.winProbability": "विजय संभाव्यता",
+  "StrategicInsights.refreshAnalysis": "विश्लेषण रिफ",
+  "Dashboard.title": "डॅशबो",
+  "Dashboard.newRFPs": "आज 3 नवीन आरएफपी शोध",
+  "Dashboard.reviewNewRfps": "नवीन आरएफपीचे पुन",
+  "Proposal.changesSavedTitle": "बदल सेव्ह",
+  "Proposal.changesSavedDesc": "आपले प्रस्ताव संपादने यशस्वीरित्या जतन केले",
+  "Masteragent.reportTitle": "आरएफपी धोरणात्मक",
+  "NotFound.message": "अरे! पृष्ठ सापडले नाही",
+  "NotFound.returnHome": "घरवर परत जा"
+}

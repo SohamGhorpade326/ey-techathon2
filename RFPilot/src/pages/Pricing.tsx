@@ -40,10 +40,12 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useT";
 
 const API = "http://127.0.0.1:8000";
 
 export default function Pricing() {
+  const { t, registerText, lang } = useT();
   const [items, setItems] = useState<any[]>([]);
   const [pricingData, setPricingData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -102,9 +104,50 @@ export default function Pricing() {
       });
   }, []);
 
+  // register dynamic texts for translation once pricing data arrives
+  useEffect(() => {
+    if (!pricingData) return;
+    try {
+      registerText && registerText("Pricing.title", "Pricing Workspace");
+      registerText && registerText("Pricing.summaryTitle", "RFP Pricing Summary - {currency}");
+      registerText && registerText("Pricing.badge.complete", "Pricing Agent Complete");
+      registerText && registerText("Pricing.badge.marginsSaved", "Margins Saved");
+      registerText && registerText("Pricing.noData", "No pricing data available. Please run the Sales Agent first.");
+      registerText && registerText("Pricing.info.tooltip", "Click info icon to view pricing justification");
+      registerText && registerText("Pricing.units", "units");
+      registerText && registerText("Pricing.percentSymbol", "%");
+      registerText && registerText("Pricing.resetMargins", "Reset Margins");
+      registerText && registerText("Pricing.recalculate", "Recalculate");
+      registerText && registerText("Pricing.evaluateViability", "Evaluate Viability");
+      registerText && registerText("Pricing.finalize", "Finalize Pricing & Proceed");
+      registerText && registerText("Pricing.materialPrice", "Material Price");
+      registerText && registerText("Pricing.testingServices", "Testing & Services");
+      registerText && registerText("Pricing.grandTotal", "Grand Total Bid Price");
+      registerText && registerText("Pricing.viewRationale", "View Valuation Rationale");
+
+      const list = pricingData.items || [];
+      list.forEach((it: any, idx: number) => {
+        const base = `Pricing.item.${idx}`;
+        registerText && registerText(`${base}.item_name`, it.item_name || "");
+        registerText && registerText(`${base}.pricing_rationale`, it.pricing_rationale || "");
+        registerText && registerText(`${base}.sku_code`, it.sku_code || "");
+      });
+    } catch (e) {
+      // ignore
+    }
+  }, [pricingData, registerText]);
+
+  const localizeDigits = (v: string | number | undefined | null) => {
+    if (v === undefined || v === null) return "";
+    const s = String(v);
+    if (!lang || (lang !== "hi" && lang !== "mr")) return s;
+    const map: Record<string, string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+    return s.replace(/[0-9]/g, d => map[d] || d);
+  }
+
   if (loading) {
     return (
-      <MainLayout title="Pricing Workspace">
+      <MainLayout title={t ? t("Pricing.title","Pricing Workspace") : "Pricing Workspace"}>
         <div className="flex h-[60vh] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -114,9 +157,9 @@ export default function Pricing() {
 
   if (!pricingData || !items || items.length === 0) {
     return (
-      <MainLayout title="Pricing Workspace">
+      <MainLayout title={t ? t("Pricing.title","Pricing Workspace") : "Pricing Workspace"}>
         <div className="text-center py-20">
-          <p className="text-muted-foreground">No pricing data available. Please run the Sales Agent first.</p>
+          <p className="text-muted-foreground">{t ? t("Pricing.noData","No pricing data available. Please run the Sales Agent first.") : "No pricing data available. Please run the Sales Agent first."}</p>
         </div>
       </MainLayout>
     );
@@ -378,10 +421,10 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
 
   return (
     <MainLayout
-      title="Pricing Workspace"
+      title={t ? t("Pricing.title","Pricing Workspace") : "Pricing Workspace"}
       breadcrumbs={[
-        { name: "Dashboard", href: "/dashboard" },
-        { name: "Pricing & Summary" },
+        { name: t ? t("Nav.dashboard","Dashboard") : "Dashboard", href: "/dashboard" },
+        { name: t ? t("Pricing.summaryNav","Pricing & Summary") : "Pricing & Summary" },
       ]}
     >
       <div className="space-y-6">
@@ -393,20 +436,20 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
         >
           <div>
             <p className="text-muted-foreground">
-              RFP Pricing Summary - {pricingData.currency || "INR"}
+              {t ? t("Pricing.summaryTitle", `RFP Pricing Summary - ${pricingData.currency || "INR"}`) : `RFP Pricing Summary - ${pricingData.currency || "INR"}`}
             </p>
             <div className="flex items-center gap-4 mt-2">
               <Badge variant="outline" className="bg-agent-pricing/10 text-agent-pricing border-agent-pricing/30">
                 <Sparkles className="h-3 w-3 mr-1" />
-                Pricing Agent Complete
+                {t ? t("Pricing.badge.complete","Pricing Agent Complete") : "Pricing Agent Complete"}
               </Badge>
               <span className="text-sm text-muted-foreground">
-                {items.length} items • Auto-generated from confirmed SKUs
+                {localizeDigits(items.length)} {t ? t("Pricing.items","items") : "items"} • {t ? t("Pricing.autoGenerated","Auto-generated from confirmed SKUs") : "Auto-generated from confirmed SKUs"}
               </span>
               {localStorage.getItem('pricing_margins') && (
                 <Badge variant="outline" className="bg-success/10 text-success border-success/30">
                   <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Margins Saved
+                  {t ? t("Pricing.badge.marginsSaved","Margins Saved") : "Margins Saved"}
                 </Badge>
               )}
             </div>
@@ -423,12 +466,12 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
           >
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-destructive">Risk Flag Detected</p>
+              <p className="font-medium text-destructive">{t ? t("Pricing.risk.title","Risk Flag Detected") : "Risk Flag Detected"}</p>
               <p className="text-sm text-destructive/80 mt-1">
-                {highRiskItems.length > 0 && `${highRiskItems.length} high-risk item(s)`}
-                {highRiskItems.length > 0 && mediumRiskItems.length > 0 && " and "}
-                {mediumRiskItems.length > 0 && `${mediumRiskItems.length} medium-risk item(s)`} identified. 
-                Consider reviewing technical specifications or adjusting pricing accordingly.
+                {highRiskItems.length > 0 && <>{localizeDigits(highRiskItems.length)} {t ? t("Pricing.risk.high","high-risk item(s)") : "high-risk item(s)"}</>}
+                {highRiskItems.length > 0 && mediumRiskItems.length > 0 && <> {t ? t("Pricing.and","and") : "and"} </>}
+                {mediumRiskItems.length > 0 && <>{localizeDigits(mediumRiskItems.length)} {t ? t("Pricing.risk.medium","medium-risk item(s)") : "medium-risk item(s)"}</>}{' '}
+                {t ? t("Pricing.risk.suffix","identified. Consider reviewing technical specifications or adjusting pricing accordingly.") : "identified. Consider reviewing technical specifications or adjusting pricing accordingly."}
               </p>
             </div>
           </motion.div>
@@ -444,19 +487,19 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
           <div className="overflow-x-auto">
             <Table className="min-w-[1400px]">
               <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="whitespace-nowrap">SKU Code</TableHead>
-                  <TableHead className="whitespace-nowrap">Item Description</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Quantity</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Unit Price (₹)</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Material Total (₹)</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Testing Cost (₹)</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Line Total (₹)</TableHead>
-                  <TableHead className="text-center whitespace-nowrap">Margin %</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Selling Price (₹)</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Gross Margin (₹)</TableHead>
-                  <TableHead className="text-center whitespace-nowrap">Risk</TableHead>
-                </TableRow>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="whitespace-nowrap">{t ? t("Pricing.col.skuCode","SKU Code") : "SKU Code"}</TableHead>
+                    <TableHead className="whitespace-nowrap">{t ? t("Pricing.col.itemDesc","Item Description") : "Item Description"}</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">{t ? t("Pricing.col.quantity","Quantity") : "Quantity"}</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">{t ? t("Pricing.col.unitPrice","Unit Price (₹)") : "Unit Price (₹)"}</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">{t ? t("Pricing.col.materialTotal","Material Total (₹)") : "Material Total (₹)"}</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">{t ? t("Pricing.col.testingCost","Testing Cost (₹)") : "Testing Cost (₹)"}</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">{t ? t("Pricing.col.lineTotal","Line Total (₹)") : "Line Total (₹)"}</TableHead>
+                    <TableHead className="text-center whitespace-nowrap">{t ? t("Pricing.col.margin","Margin %") : "Margin %"}</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">{t ? t("Pricing.col.sellingPrice","Selling Price (₹)") : "Selling Price (₹)"}</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">{t ? t("Pricing.col.grossMargin","Gross Margin (₹)") : "Gross Margin (₹)"}</TableHead>
+                    <TableHead className="text-center whitespace-nowrap">{t ? t("Pricing.col.risk","Risk") : "Risk"}</TableHead>
+                  </TableRow>
               </TableHeader>
             <TableBody>
               {items.map((item, index) => {
@@ -474,8 +517,8 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                       isHighRisk && "bg-destructive/5"
                     )}
                   >
-                    <TableCell className="font-mono text-sm whitespace-nowrap">{item.sku_code}</TableCell>
-                    <TableCell className="min-w-[200px]">{item.item_name}</TableCell>
+                    <TableCell className="font-mono text-sm whitespace-nowrap">{t ? t(`Pricing.item.${index}.sku_code`, item.sku_code) : item.sku_code}</TableCell>
+                    <TableCell className="min-w-[200px]">{t ? t(`Pricing.item.${index}.item_name`, item.item_name || item.sku_code) : (item.item_name || item.sku_code)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         <Input
@@ -486,7 +529,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                           }
                           className="w-24 text-right"
                         />
-                        <span className="text-xs text-muted-foreground">units</span>
+                        <span className="text-xs text-muted-foreground">{t ? t("Pricing.units","units") : "units"}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono whitespace-nowrap">
@@ -494,7 +537,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div className="flex items-center justify-end gap-1">
-                              <span>₹{item.unit_price?.toLocaleString()}</span>
+                              <span>₹{localizeDigits((item.unit_price ?? 0).toLocaleString())}</span>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -506,23 +549,23 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                             </div>
                           </TooltipTrigger>
                           <TooltipContent side="left" className="max-w-xs">
-                            <p className="text-xs">Click info icon to view pricing justification</p>
+                            <p className="text-xs">{t ? t("Pricing.info.tooltip","Click info icon to view pricing justification") : "Click info icon to view pricing justification"}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-right font-mono whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
-                        <span>₹{item.material_total?.toLocaleString()}</span>
+                        <span>₹{localizeDigits((item.material_total ?? 0).toLocaleString())}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
-                        <span>₹{item.testing_cost?.toLocaleString()}</span>
+                        <span>₹{localizeDigits((item.testing_cost ?? 0).toLocaleString())}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono font-medium whitespace-nowrap">
-                      ₹{item.line_total?.toLocaleString()}
+                      ₹{localizeDigits((item.line_total ?? 0).toLocaleString())}
                     </TableCell>
                     <TableCell className="text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-2">
@@ -579,10 +622,10 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               <div className="p-2 rounded-lg bg-primary/10">
                 <DollarSign className="h-5 w-5 text-primary" />
               </div>
-              <span className="text-sm text-muted-foreground">Material Price</span>
+              <span className="text-sm text-muted-foreground">{t ? t("Pricing.materialPrice","Material Price") : "Material Price"}</span>
             </div>
             <p className="text-2xl font-bold font-mono">
-              ₹{materialTotal.toLocaleString()}
+              ₹{localizeDigits(materialTotal.toLocaleString())}
             </p>
           </div>
 
@@ -591,10 +634,10 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               <div className="p-2 rounded-lg bg-info/10">
                 <Calculator className="h-5 w-5 text-info" />
               </div>
-              <span className="text-sm text-muted-foreground">Testing & Services</span>
+              <span className="text-sm text-muted-foreground">{t ? t("Pricing.testingServices","Testing & Services") : "Testing & Services"}</span>
             </div>
             <p className="text-2xl font-bold font-mono">
-              ₹{testingTotal.toLocaleString()}
+              ₹{localizeDigits(testingTotal.toLocaleString())}
             </p>
           </div>
 
@@ -603,10 +646,10 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               <div className="p-2 rounded-lg bg-primary">
                 <FileText className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="text-sm text-primary">Grand Total Bid Price</span>
+              <span className="text-sm text-primary">{t ? t("Pricing.grandTotal","Grand Total Bid Price") : "Grand Total Bid Price"}</span>
             </div>
             <p className="text-3xl font-bold font-mono text-primary">
-              ₹{grandTotal.toLocaleString()}
+              ₹{localizeDigits(grandTotal.toLocaleString())}
             </p>
             {pricingData?.totals_rationale && (
               <Button
@@ -616,7 +659,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                 onClick={() => setShowRationale(true)}
               >
                 <Sparkles className="h-3 w-3 mr-2" />
-                View Valuation Rationale
+                {t ? t("Pricing.viewRationale","View Valuation Rationale") : "View Valuation Rationale"}
               </Button>
             )}
           </div>
@@ -631,12 +674,12 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
         >
           <div className="flex items-center gap-3">
             <p className="text-sm text-muted-foreground">
-              Pricing auto-generated from Product & Pricing Repository
+              {t ? t("Pricing.autoNote","Pricing auto-generated from Product & Pricing Repository") : "Pricing auto-generated from Product & Pricing Repository"}
             </p>
             {localStorage.getItem('pricing_margins') && (
               <p className="text-xs text-success flex items-center gap-1">
                 <Sparkles className="h-3 w-3" />
-                Custom margins persist across pages
+                {t ? t("Pricing.customMarginsPersist","Custom margins persist across pages") : "Custom margins persist across pages"}
               </p>
             )}
           </div>
@@ -648,12 +691,12 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                 className="text-destructive hover:text-destructive"
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Reset Margins
+                {t ? t("Pricing.resetMargins","Reset Margins") : "Reset Margins"}
               </Button>
             )}
             <Button variant="outline">
               <Calculator className="h-4 w-4 mr-2" />
-              Recalculate
+              {t ? t("Pricing.recalculate","Recalculate") : "Recalculate"}
             </Button>
             <Button 
               variant="outline"
@@ -661,11 +704,11 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               className="bg-gradient-to-r from-blue-600/10 to-purple-600/10 hover:from-blue-600/20 hover:to-purple-600/20 border-blue-500/50"
             >
               <Target className="h-4 w-4 mr-2" />
-              Evaluate Viability
+              {t ? t("Pricing.evaluateViability","Evaluate Viability") : "Evaluate Viability"}
             </Button>
             <Button>
               <CheckCircle2 className="h-4 w-4 mr-2" />
-              Finalize Pricing & Proceed
+              {t ? t("Pricing.finalize","Finalize Pricing & Proceed") : "Finalize Pricing & Proceed"}
             </Button>
           </div>
         </motion.div>
@@ -676,11 +719,11 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
         if (!open) setSelectedItemRationale("");
         setShowRationale(open);
       }}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Info className="h-5 w-5 text-primary" />
-              Pricing Justification
+              {t ? t("Pricing.dialog.itemTitle","Pricing Justification") : "Pricing Justification"}
             </DialogTitle>
           </DialogHeader>
           <div className="bg-info/5 border border-info/30 rounded-lg p-4">
@@ -692,8 +735,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
           </div>
           <div className="border-t pt-4">
             <p className="text-xs text-muted-foreground">
-              Pricing is retrieved from the validated Product & Pricing Repository. Testing costs are calculated 
-              based on mandatory compliance tests from the Test Data catalog.
+              {t ? t("Pricing.dialog.footerNote","Pricing is retrieved from the validated Product & Pricing Repository. Testing costs are calculated based on mandatory compliance tests from the Test Data catalog.") : "Pricing is retrieved from the validated Product & Pricing Repository. Testing costs are calculated based on mandatory compliance tests from the Test Data catalog."}
             </p>
           </div>
         </DialogContent>
@@ -705,7 +747,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              Explainable AI: Valuation Rationale
+              {t ? t("Pricing.dialog.totalsTitle","Explainable AI: Valuation Rationale") : "Explainable AI: Valuation Rationale"}
             </DialogTitle>
           </DialogHeader>
           {pricingData?.totals_rationale && (
@@ -714,7 +756,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               <div className="bg-primary/5 border border-primary/30 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <DollarSign className="h-4 w-4 text-primary" />
-                  <h3 className="font-semibold text-primary">Material Cost Justification</h3>
+                  <h3 className="font-semibold text-primary">{t ? t("Pricing.totals.materialTitle","Material Cost Justification") : "Material Cost Justification"}</h3>
                 </div>
                 <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line space-y-2">
                   {pricingData.totals_rationale.material_total_justification?.split('**').map((part: string, idx: number) => (
@@ -727,7 +769,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               <div className="bg-info/5 border border-info/30 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Calculator className="h-4 w-4 text-info" />
-                  <h3 className="font-semibold text-info">Testing Cost Justification</h3>
+                  <h3 className="font-semibold text-info">{t ? t("Pricing.totals.testingTitle","Testing Cost Justification") : "Testing Cost Justification"}</h3>
                 </div>
                 <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line space-y-2">
                   {pricingData.totals_rationale.testing_total_justification?.split('**').map((part: string, idx: number) => (
@@ -740,7 +782,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               <div className="bg-success/5 border border-success/30 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <FileText className="h-4 w-4 text-success" />
-                  <h3 className="font-semibold text-success">Grand Total Justification</h3>
+                  <h3 className="font-semibold text-success">{t ? t("Pricing.totals.grandTitle","Grand Total Justification") : "Grand Total Justification"}</h3>
                 </div>
                 <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line space-y-2">
                   {getDynamicGrandTotalJustification()?.split('**').map((part: string, idx: number) => (
@@ -752,14 +794,11 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               {/* Footer Note */}
               <div className="border-t pt-4">
                 <p className="text-xs text-muted-foreground">
-                  <strong>Audit Note:</strong> These justifications are generated by the Pricing Agent's automated 
-                  valuation system. All costs are traceable to the Product Catalog and Test Data collections in MongoDB, 
-                  ensuring full transparency and audit compliance. These rationales are for internal dashboard use only 
-                  and are NOT included in the final proposal document.
+                  <strong>{t ? t("Pricing.totals.auditNoteStrong","Audit Note:") : "Audit Note:"}</strong> {t ? t("Pricing.totals.auditNote","These justifications are generated by the Pricing Agent's automated valuation system. All costs are traceable to the Product Catalog and Test Data collections in MongoDB, ensuring full transparency and audit compliance. These rationales are for internal dashboard use only and are NOT included in the final proposal document.") : "These justifications are generated by the Pricing Agent's automated valuation system. All costs are traceable to the Product Catalog and Test Data collections in MongoDB, ensuring full transparency and audit compliance. These rationales are for internal dashboard use only and are NOT included in the final proposal document."}
                 </p>
                 <p className="text-xs text-info mt-2 flex items-center gap-1">
                   <Sparkles className="h-3 w-3" />
-                  <strong>Dynamic Calculation:</strong> Grand Total values reflect your current margin adjustments in real-time.
+                  <strong>{t ? t("Pricing.totals.dynamicStrong","Dynamic Calculation:") : "Dynamic Calculation:"}</strong> {t ? t("Pricing.totals.dynamicNote","Grand Total values reflect your current margin adjustments in real-time.") : "Grand Total values reflect your current margin adjustments in real-time."}
                 </p>
               </div>
             </div>
@@ -812,13 +851,12 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
             {overallSpecMatch > 70 && (
               <div className="space-y-4">
                 <div className="p-4 rounded-lg bg-green-600/10 border border-green-600/30">
-                  <p className="text-green-700 dark:text-green-400 font-semibold mb-2">
-                    ✅ High Viability Detected
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Suggestion: The technical specifications match our capabilities very well. 
-                    This RFP has a high probability of success. Consider proceeding to the Final Proposal stage.
-                  </p>
+                      <p className="text-green-700 dark:text-green-400 font-semibold mb-2">
+                        {t ? t("Pricing.viability.highTitle","✅ High Viability Detected") : "✅ High Viability Detected"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {t ? t("Pricing.viability.highNote","Suggestion: The technical specifications match our capabilities very well. This RFP has a high probability of success. Consider proceeding to the Final Proposal stage.") : "Suggestion: The technical specifications match our capabilities very well. This RFP has a high probability of success. Consider proceeding to the Final Proposal stage."}
+                      </p>
                 </div>
                 <div className="flex gap-3">
                   <Button 
@@ -826,7 +864,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                     onClick={() => setShowViabilityDialog(false)}
                   >
                     <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Continue to Proposal
+                    {t ? t("Pricing.viability.continue","Continue to Proposal") : "Continue to Proposal"}
                   </Button>
                   <Button 
                     variant="outline"
@@ -838,7 +876,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                     disabled={isSkipping}
                   >
                     {isSkipping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <SkipForward className="h-4 w-4 mr-2" />}
-                    Manual Skip
+                    {t ? t("Pricing.viability.manualSkip","Manual Skip") : "Manual Skip"}
                   </Button>
                 </div>
               </div>
@@ -848,11 +886,10 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               <div className="space-y-4">
                 <div className="p-4 rounded-lg bg-yellow-600/10 border border-yellow-600/30">
                   <p className="text-yellow-700 dark:text-yellow-400 font-semibold mb-2">
-                    ⚠️ Medium Viability
+                    {t ? t("Pricing.viability.mediumTitle","⚠️ Medium Viability") : "⚠️ Medium Viability"}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Suggestion: The technical match is moderate. Consider saving this RFP to the Repository 
-                    for further review, or skip it to find a better opportunity.
+                    {t ? t("Pricing.viability.mediumNote","Suggestion: The technical match is moderate. Consider saving this RFP to the Repository for further review, or skip it to find a better opportunity.") : "Suggestion: The technical match is moderate. Consider saving this RFP to the Repository for further review, or skip it to find a better opportunity."}
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -860,10 +897,10 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                     variant="outline"
                     className="flex-1"
                     disabled
-                    title="Coming Soon"
+                    title={t ? t("Pricing.viability.comingSoon","Coming Soon") : "Coming Soon"}
                   >
                     <FileText className="h-4 w-4 mr-2" />
-                    Save & Cycle (Coming Soon)
+                    {t ? t("Pricing.viability.saveAndCycle","Save & Cycle (Coming Soon)") : "Save & Cycle (Coming Soon)"}
                   </Button>
                   <Button 
                     variant="destructive"
@@ -875,7 +912,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                     disabled={isSkipping}
                   >
                     {isSkipping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <SkipForward className="h-4 w-4 mr-2" />}
-                    Cycle Without Saving
+                    {t ? t("Pricing.viability.cycleWithoutSave","Cycle Without Saving") : "Cycle Without Saving"}
                   </Button>
                 </div>
               </div>
@@ -885,11 +922,10 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
               <div className="space-y-4">
                 <div className="p-4 rounded-lg bg-red-600/10 border border-red-600/30">
                   <p className="text-red-700 dark:text-red-400 font-semibold mb-2">
-                    ❌ Low Viability
+                    {t ? t("Pricing.viability.lowTitle","❌ Low Viability") : "❌ Low Viability"}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Suggestion: The technical specifications do not match our capabilities well. 
-                    It is recommended to discard this RFP and find a better opportunity to maximize your win rate.
+                    {t ? t("Pricing.viability.lowNote","Suggestion: The technical specifications do not match our capabilities well. It is recommended to discard this RFP and find a better opportunity to maximize your win rate.") : "Suggestion: The technical specifications do not match our capabilities well. It is recommended to discard this RFP and find a better opportunity to maximize your win rate."}
                   </p>
                 </div>
                 <Button 
@@ -902,7 +938,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
                   disabled={isSkipping}
                 >
                   {isSkipping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
-                  Discard & Cycle
+                  {t ? t("Pricing.viability.discard","Discard & Cycle") : "Discard & Cycle"}
                 </Button>
               </div>
             )}

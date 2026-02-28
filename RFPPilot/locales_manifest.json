@@ -1,0 +1,18 @@
+{
+  "TopBar.searchPlaceholder": "Search RFPs, SKUs...",
+  "TopBar.loggedInAs": "Logged in as:",
+  "TopBar.logout": "Logout",
+  "StrategicInsights.title": "Strategic Insights",
+  "StrategicInsights.winProbabilityPredictor": "Win Probability Predictor",
+  "StrategicInsights.winProbabilityDesc": "AI-powered prediction based on current RFP and historical performance",
+  "StrategicInsights.winProbability": "Win Probability",
+  "StrategicInsights.refreshAnalysis": "Refresh Analysis",
+  "Dashboard.title": "Dashboard",
+  "Dashboard.newRFPs": "3 New RFPs Discovered Today",
+  "Dashboard.reviewNewRfps": "Review New RFPs",
+  "Proposal.changesSavedTitle": "Changes Saved",
+  "Proposal.changesSavedDesc": "Your proposal edits have been saved successfully.",
+  "Masteragent.reportTitle": "RFP STRATEGIC ANALYSIS REPORT",
+  "NotFound.message": "Oops! Page not found",
+  "NotFound.returnHome": "Return to Home"
+}

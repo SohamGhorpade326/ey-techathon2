@@ -40,6 +40,7 @@ import {
   X,
   Paperclip,
 } from "lucide-react";
+import { useT } from "@/hooks/useT";
 import jsPDF from "jspdf";
 import { 
   Document, 
@@ -64,6 +65,7 @@ const versions = [
 ];
 
 export default function Proposal() {
+  const { t, registerText, lang } = useT();
   const [coverContent, setCoverContent] = useState("");
   const [originalBidContent, setOriginalBidContent] = useState(""); // Store original bid content separately
   const [editableBidContent, setEditableBidContent] = useState("");
@@ -105,6 +107,7 @@ export default function Proposal() {
         setOriginalBidContent(formattedProposal); // Store original bid content
         setCoverContent(formattedProposal); // Initially show bid as cover too
         setEditableBidContent(formattedProposal); // Initialize editable content
+        registerText && registerText("Proposal.bid.original", formattedProposal);
         setComplianceItems(complianceData);
         setPricingTotals(totalsData);
         
@@ -151,6 +154,67 @@ export default function Proposal() {
         }
         
         setLoading(false);
+        try {
+          registerText && registerText("Proposal.title","Proposal Builder");
+          registerText && registerText("Proposal.tab.cover","Cover Letter");
+          registerText && registerText("Proposal.tab.compliance","Product Compliance");
+          registerText && registerText("Proposal.tab.pricing","Pricing Summary");
+          registerText && registerText("Proposal.tab.preview","Full Preview");
+          registerText && registerText("Proposal.cover.aiNote","AI-powered or manually written");
+          registerText && registerText("Proposal.cover.choose","Choose how you'd like to create your cover letter");
+          registerText && registerText("Proposal.cover.generate","Generate with AI");
+          registerText && registerText("Proposal.cover.enterManual","Enter Manually");
+          registerText && registerText("Proposal.cover.reset","Reset");
+          registerText && registerText("Proposal.cover.save","Save Cover Letter");
+
+          registerText && registerText("Proposal.compliance.title","Product Compliance Table");
+          registerText && registerText("Proposal.compliance.subtitle","Auto-generated from Technical Agent analysis");
+          registerText && registerText("Proposal.compliance.col.rfpItem","RFP Item");
+          registerText && registerText("Proposal.compliance.col.unitPrice","Unit Price");
+          registerText && registerText("Proposal.compliance.col.compliance","Compliance");
+          registerText && registerText("Proposal.compliance.col.specMatch","Spec-Match");
+
+          registerText && registerText("Proposal.pricing.title","Consolidated Pricing");
+          registerText && registerText("Proposal.pricing.subtitle","From Pricing Agent calculation");
+          registerText && registerText("Proposal.pricing.material","Material Cost");
+          registerText && registerText("Proposal.pricing.testing","Testing & Services");
+          registerText && registerText("Proposal.pricing.subtotal","Subtotal");
+          registerText && registerText("Proposal.pricing.discountLabel","Discount Percentage");
+          registerText && registerText("Proposal.pricing.discountApplied","Discount Applied");
+          registerText && registerText("Proposal.pricing.applyDiscount","Apply Discount");
+          registerText && registerText("Proposal.pricing.removeDiscount","Remove Discount");
+          registerText && registerText("Proposal.pricing.grandTotal","Grand Total");
+
+          registerText && registerText("Proposal.preview.title","Editable Proposal Preview");
+          registerText && registerText("Proposal.preview.save","Save Changes");
+          registerText && registerText("Proposal.preview.placeholder","Edit your proposal content here...");
+          registerText && registerText("Proposal.version.title","Version History");
+          registerText && registerText("Proposal.version.by","by {author}");
+          registerText && registerText("Proposal.version.status.Draft","Draft");
+          registerText && registerText("Proposal.version.status.Review","Review");
+
+          registerText && registerText("Proposal.actions.saveDraft","Save Draft");
+          registerText && registerText("Proposal.actions.exportPDF","Export PDF");
+          registerText && registerText("Proposal.actions.exportWord","Export Word");
+          registerText && registerText("Proposal.actions.downloadPPT","Download PPT");
+          registerText && registerText("Proposal.actions.exporting","Exporting...");
+          registerText && registerText("Proposal.actions.markReady","Mark Ready to Submit");
+
+          registerText && registerText("Proposal.email.newMessage","New Message");
+          registerText && registerText("Proposal.email.to","To:");
+
+          // register per-item texts
+          (complianceData || []).forEach((it: any, idx: number) => {
+            registerText && registerText(`Proposal.compliance.item.${idx}.rfp_item`, it.rfp_item || "");
+            registerText && registerText(`Proposal.compliance.item.${idx}.compliance`, it.compliance || "");
+          });
+          (pricingData.items || []).forEach((it: any, idx: number) => {
+            registerText && registerText(`Proposal.pricing.item.${idx}.sku_code`, it.sku_code || "");
+            registerText && registerText(`Proposal.pricing.item.${idx}.item_name`, it.item_name || "");
+          });
+        } catch (e) {
+          // ignore
+        }
       })
       .catch(err => {
         console.error("Error fetching proposal data:", err);
@@ -233,8 +297,8 @@ export default function Proposal() {
 
       if (result.status === "success") {
         toast({
-          title: "Changes Saved",
-          description: "Your proposal edits have been saved successfully.",
+          title: t("Proposal.changesSavedTitle","Changes Saved"),
+          description: t("Proposal.changesSavedDesc","Your proposal edits have been saved successfully."),
           duration: 3000,
         });
       } else {
@@ -242,8 +306,8 @@ export default function Proposal() {
       }
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to save changes. Please try again.",
+        title: t("Proposal.errorTitle","Error"),
+        description: error.message || t("Proposal.errorDesc","Failed to save changes. Please try again."),
         variant: "destructive",
         duration: 3000,
       });
@@ -273,17 +337,17 @@ export default function Proposal() {
         setCoverContent(result.cover_letter);
         setCoverLetterMode("ai");
         toast({
-          title: "Cover Letter Generated",
-          description: "AI-powered cover letter has been created. You can edit it before saving.",
+          title: t ? t("Proposal.cover.generatedTitle","Cover Letter Generated") : "Cover Letter Generated",
+          description: t ? t("Proposal.cover.generatedDesc","AI-powered cover letter has been created. You can edit it before saving.") : "AI-powered cover letter has been created. You can edit it before saving.",
           duration: 3000,
         });
       } else {
-        throw new Error(result.message || "Failed to generate cover letter");
+        throw new Error(result.message || (t ? t("Proposal.cover.genFail","Failed to generate cover letter") : "Failed to generate cover letter"));
       }
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to generate cover letter. Please try again.",
+        title: t ? t("Proposal.cover.genErrorTitle","Error") : "Error",
+        description: error.message || (t ? t("Proposal.cover.genErrorDesc","Failed to generate cover letter. Please try again.") : "Failed to generate cover letter. Please try again."),
         variant: "destructive",
         duration: 3000,
       });
@@ -314,7 +378,7 @@ export default function Proposal() {
     }
     
     // Pre-fill email data with ONLY the cover letter (not full bid)
-    const emailBody = coverContent || "Please generate a cover letter first.";
+    const emailBody = coverContent || (t ? t("Proposal.email.noCover","Please generate a cover letter first.") : "Please generate a cover letter first.");
     setEmailData({
       to: recipient,
       subject: `Proposal Submission - ${rfpTitle}`,
@@ -366,19 +430,19 @@ export default function Proposal() {
 
       if (result.status === "success") {
         toast({
-          title: "Email Sent Successfully",
-          description: `Bid submitted to ${emailData.to} via SendGrid.`,
+          title: t ? t("Proposal.email.sentTitle","Email Sent Successfully") : "Email Sent Successfully",
+          description: t ? t("Proposal.email.sentDesc","Bid submitted to {email} via SendGrid.").replace('{email}', emailData.to) : `Bid submitted to ${emailData.to} via SendGrid.`,
           duration: 3000,
         });
         setShowGmailModal(false);
         setAttachments([]);
       } else {
-        throw new Error(result.message || "Failed to send email");
+        throw new Error(result.message || (t ? t("Proposal.email.fail","Failed to send email") : "Failed to send email"));
       }
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to send email. Please try again.",
+        title: t ? t("Proposal.email.errorTitle","Error") : "Error",
+        description: error.message || (t ? t("Proposal.email.errorDesc","Failed to send email. Please try again.") : "Failed to send email. Please try again."),
         variant: "destructive",
         duration: 3000,
       });
@@ -394,6 +458,20 @@ export default function Proposal() {
     }
     return pricingItems.reduce((sum, item) => sum + (item.selling_price || item.line_total || 0), 0);
   };
+
+  const localizeDigits = (v: string | number | undefined | null) => {
+    if (v === undefined || v === null) return "";
+    const s = String(v);
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    const map: Record<string,string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+    return s.replace(/[0-9]/g, d => map[d] || d);
+  }
+
+  const localizeDigitsInText = (text: string) => {
+    if (!text) return text;
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return text;
+    return text.replace(/[0-9]/g, d => ({ '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' }[d] || d));
+  }
 
   const calculateDiscountedTotal = () => {
     const subtotal = getDynamicSubtotal();
@@ -1013,7 +1091,7 @@ export default function Proposal() {
             <div className="flex items-center gap-4 mt-2">
               <Badge variant="outline" className="bg-agent-master/10 text-agent-master border-agent-master/30">
                 <Sparkles className="h-3 w-3 mr-1" />
-                Master Agent Consolidated
+                {t ? t("Proposal.masterBadge","Master Agent Consolidated") : "Master Agent Consolidated"}
               </Badge>
             </div>
           </div>
@@ -1032,7 +1110,7 @@ export default function Proposal() {
             </Select>
             <Button variant="outline">
               <History className="h-4 w-4 mr-2" />
-              History
+              {t ? t("Proposal.version.title","Version History") : "History"}
             </Button>
           </div>
         </motion.div>
@@ -1046,21 +1124,21 @@ export default function Proposal() {
         >
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-success" />
-            <span className="text-sm">Technical aligned</span>
+            <span className="text-sm">{t ? t("Proposal.status.technical","Technical aligned") : "Technical aligned"}</span>
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-success" />
-            <span className="text-sm">Pricing aligned</span>
+            <span className="text-sm">{t ? t("Proposal.status.pricing","Pricing aligned") : "Pricing aligned"}</span>
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-warning" />
-            <span className="text-sm">Submission pending</span>
+            <span className="text-sm">{t ? t("Proposal.status.submission","Submission pending") : "Submission pending"}</span>
           </div>
           <div className="ml-auto">
             <Badge className="bg-warning/10 text-warning border border-warning/30">
-              Due in 8 days
+              {t ? t("Proposal.dueIn","Due in 8 days") : "Due in 8 days"}
             </Badge>
           </div>
         </motion.div>
@@ -1073,25 +1151,25 @@ export default function Proposal() {
         >
           <Tabs defaultValue="cover" className="space-y-4">
             <TabsList className="bg-muted/50">
-              <TabsTrigger value="cover">Cover Letter</TabsTrigger>
-              <TabsTrigger value="compliance">Product Compliance</TabsTrigger>
-              <TabsTrigger value="pricing">Pricing Summary</TabsTrigger>
-              <TabsTrigger value="preview">Full Preview</TabsTrigger>
+              <TabsTrigger value="cover">{t ? t("Proposal.tab.cover","Cover Letter") : "Cover Letter"}</TabsTrigger>
+              <TabsTrigger value="compliance">{t ? t("Proposal.tab.compliance","Product Compliance") : "Product Compliance"}</TabsTrigger>
+              <TabsTrigger value="pricing">{t ? t("Proposal.tab.pricing","Pricing Summary") : "Pricing Summary"}</TabsTrigger>
+              <TabsTrigger value="preview">{t ? t("Proposal.tab.preview","Full Preview") : "Full Preview"}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="cover" className="space-y-4">
               <div className="bg-card rounded-xl border border-border p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">Cover Letter</h3>
+                  <h3 className="font-semibold">{t ? t("Proposal.tab.cover","Cover Letter") : "Cover Letter"}</h3>
                   <span className="text-xs text-muted-foreground">
-                    AI-powered or manually written
+                    {t ? t("Proposal.cover.aiNote","AI-powered or manually written") : "AI-powered or manually written"}
                   </span>
                 </div>
                 
                 {coverLetterMode === "initial" && (
                   <div className="flex flex-col items-center justify-center py-16 space-y-4">
                     <p className="text-muted-foreground text-center mb-4">
-                      Choose how you'd like to create your cover letter
+                      {t ? t("Proposal.cover.choose","Choose how you'd like to create your cover letter") : "Choose how you'd like to create your cover letter"}
                     </p>
                     <div className="flex gap-4">
                       <Button 
@@ -1102,12 +1180,12 @@ export default function Proposal() {
                         {generatingCoverLetter ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            Generating...
+                            {t ? t("Proposal.cover.generating","Generating...") : "Generating..."}
                           </>
                         ) : (
                           <>
                             <Sparkles className="h-4 w-4" />
-                            Generate with AI
+                            {t ? t("Proposal.cover.generate","Generate with AI") : "Generate with AI"}
                           </>
                         )}
                       </Button>
@@ -1116,8 +1194,8 @@ export default function Proposal() {
                         onClick={handleManualCoverLetter}
                         className="gap-2"
                       >
-                        <Edit3 className="h-4 w-4" />
-                        Enter Manually
+                            <Edit3 className="h-4 w-4" />
+                            {t ? t("Proposal.cover.enterManual","Enter Manually") : "Enter Manually"}
                       </Button>
                     </div>
                   </div>
@@ -1143,8 +1221,8 @@ export default function Proposal() {
                       <Button
                         onClick={() => {
                           toast({
-                            title: "Cover Letter Saved",
-                            description: "Your cover letter has been saved successfully.",
+                            title: t ? t("Proposal.cover.savedTitle","Cover Letter Saved") : "Cover Letter Saved",
+                            description: t ? t("Proposal.cover.savedDesc","Your cover letter has been saved successfully.") : "Your cover letter has been saved successfully.",
                             duration: 3000,
                           });
                         }}
@@ -1162,25 +1240,25 @@ export default function Proposal() {
             <TabsContent value="compliance" className="space-y-4">
               <div className="bg-card rounded-xl border border-border overflow-hidden">
                 <div className="p-4 border-b border-border">
-                  <h3 className="font-semibold">Product Compliance Table</h3>
+                  <h3 className="font-semibold">{t ? t("Proposal.compliance.title","Product Compliance Table") : "Product Compliance Table"}</h3>
                   <p className="text-sm text-muted-foreground">
-                    Auto-generated from Technical Agent analysis
+                    {t ? t("Proposal.compliance.subtitle","Auto-generated from Technical Agent analysis") : "Auto-generated from Technical Agent analysis"}
                   </p>
                 </div>
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead>RFP Item</TableHead>
-                      <TableHead>Unit Price</TableHead>
-                      <TableHead className="text-center">Compliance</TableHead>
-                      <TableHead className="text-center">Spec-Match</TableHead>
+                      <TableHead>{t ? t("Proposal.compliance.col.rfpItem","RFP Item") : "RFP Item"}</TableHead>
+                      <TableHead>{t ? t("Proposal.compliance.col.unitPrice","Unit Price") : "Unit Price"}</TableHead>
+                      <TableHead className="text-center">{t ? t("Proposal.compliance.col.compliance","Compliance") : "Compliance"}</TableHead>
+                      <TableHead className="text-center">{t ? t("Proposal.compliance.col.specMatch","Spec-Match") : "Spec-Match"}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {complianceItems.map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell className="font-medium">{item.rfp_item}</TableCell>
-                        <TableCell className="font-mono text-sm">₹{item.unit_price?.toLocaleString()}/unit</TableCell>
+                        <TableCell className="font-medium">{t ? t(`Proposal.compliance.item.${index}.rfp_item`, item.rfp_item) : item.rfp_item}</TableCell>
+                        <TableCell className="font-mono text-sm">₹{localizeDigits(item.unit_price?.toLocaleString())}/{t ? t("Proposal.compliance.unit","unit") : "unit"}</TableCell>
                         <TableCell className="text-center">
                           <Badge
                             className={
@@ -1189,7 +1267,7 @@ export default function Proposal() {
                                 : "bg-warning/10 text-warning border border-warning/30"
                             }
                           >
-                            {item.compliance}
+                            {t ? t(`Proposal.compliance.item.${index}.compliance`, item.compliance) : item.compliance}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
@@ -1202,7 +1280,7 @@ export default function Proposal() {
                                 : "bg-destructive/10 text-destructive border border-destructive/30"
                             }
                           >
-                            {item.spec_match_percent?.toFixed(1)}%
+                            {localizeDigits(item.spec_match_percent?.toFixed(1))}%
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -1215,23 +1293,23 @@ export default function Proposal() {
             <TabsContent value="pricing" className="space-y-4">
               <div className="bg-card rounded-xl border border-border p-6">
                 <div className="mb-4">
-                  <h3 className="font-semibold">Consolidated Pricing</h3>
+                  <h3 className="font-semibold">{t ? t("Proposal.pricing.title","Consolidated Pricing") : "Consolidated Pricing"}</h3>
                   <p className="text-sm text-muted-foreground">
-                    From Pricing Agent calculation
+                    {t ? t("Proposal.pricing.subtitle","From Pricing Agent calculation") : "From Pricing Agent calculation"}
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-6 mb-6">
                   <div className="p-4 bg-muted/30 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Material Cost</p>
-                    <p className="text-2xl font-bold font-mono mt-1">₹{pricingTotals.material_total?.toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground">{t ? t("Proposal.pricing.material","Material Cost") : "Material Cost"}</p>
+                    <p className="text-2xl font-bold font-mono mt-1">₹{localizeDigits(pricingTotals.material_total?.toLocaleString())}</p>
                   </div>
                   <div className="p-4 bg-muted/30 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Testing & Services</p>
-                    <p className="text-2xl font-bold font-mono mt-1">₹{pricingTotals.testing_total?.toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground">{t ? t("Proposal.pricing.testing","Testing & Services") : "Testing & Services"}</p>
+                    <p className="text-2xl font-bold font-mono mt-1">₹{localizeDigits(pricingTotals.testing_total?.toLocaleString())}</p>
                   </div>
                   <div className="p-4 bg-muted/30 rounded-lg border border-border">
-                    <p className="text-sm text-muted-foreground">Subtotal</p>
-                    <p className="text-2xl font-bold font-mono mt-1">₹{getDynamicSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-sm text-muted-foreground">{t ? t("Proposal.pricing.subtotal","Subtotal") : "Subtotal"}</p>
+                    <p className="text-2xl font-bold font-mono mt-1">₹{localizeDigits(getDynamicSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</p>
                   </div>
                 </div>
 
@@ -1239,7 +1317,7 @@ export default function Proposal() {
                 <div className="border-t border-border pt-6 space-y-4">
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
-                      <label className="text-sm font-medium mb-2 block">Discount Percentage</label>
+                      <label className="text-sm font-medium mb-2 block">{t ? t("Proposal.pricing.discountLabel","Discount Percentage") : "Discount Percentage"}</label>
                       <div className="flex items-center gap-3">
                         <input
                           type="number"
@@ -1257,13 +1335,13 @@ export default function Proposal() {
                           }}
                           className="w-32 px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                         />
-                        <span className="text-muted-foreground">%</span>
+                        <span className="text-muted-foreground">{t ? t("Proposal.percent","%") : "%"}</span>
                         <Button 
                           onClick={handleApplyDiscount}
                           className="ml-2"
                           disabled={discountApplied}
                         >
-                          {discountApplied ? 'Discount Applied' : 'Apply Discount'}
+                          {discountApplied ? (t ? t("Proposal.pricing.discountApplied","Discount Applied") : 'Discount Applied') : (t ? t("Proposal.pricing.applyDiscount","Apply Discount") : 'Apply Discount')}
                         </Button>
                       </div>
                     </div>
@@ -1273,8 +1351,8 @@ export default function Proposal() {
                     <div className="space-y-3 pt-4 border-t border-border">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-sm">
-                          <span className="text-muted-foreground">Discount ({discount}%)</span>
-                          <span className="font-mono text-destructive">-₹{getDiscountAmount().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          <span className="text-muted-foreground">{t ? t("Proposal.pricing.discount","Discount ({p}%)",) : `Discount (${discount}%)`}</span>
+                          <span className="font-mono text-destructive">-₹{localizeDigits(getDiscountAmount().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</span>
                         </div>
                         <Button 
                           variant="ghost"
@@ -1288,8 +1366,8 @@ export default function Proposal() {
                       </div>
                       <div className="p-4 bg-primary/10 rounded-lg border border-primary/30">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm text-primary font-medium">Grand Total (After Discount)</p>
-                          <p className="text-2xl font-bold font-mono text-primary">₹{calculateDiscountedTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                          <p className="text-sm text-primary font-medium">{t ? t("Proposal.pricing.grandTotalAfter","Grand Total (After Discount)") : "Grand Total (After Discount)"}</p>
+                          <p className="text-2xl font-bold font-mono text-primary">₹{localizeDigits(calculateDiscountedTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</p>
                         </div>
                       </div>
                     </div>
@@ -1298,8 +1376,8 @@ export default function Proposal() {
                   {!discountApplied && (
                     <div className="p-4 bg-primary/10 rounded-lg border border-primary/30">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm text-primary font-medium">Grand Total</p>
-                        <p className="text-2xl font-bold font-mono text-primary">₹{getDynamicSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <p className="text-sm text-primary font-medium">{t ? t("Proposal.pricing.grandTotal","Grand Total") : "Grand Total"}</p>
+                        <p className="text-2xl font-bold font-mono text-primary">₹{localizeDigits(getDynamicSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</p>
                       </div>
                     </div>
                   )}
@@ -1324,7 +1402,7 @@ export default function Proposal() {
             <TabsContent value="preview" className="space-y-4">
               <div className="bg-card rounded-xl border border-border p-8">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">Editable Proposal Preview</h3>
+                  <h3 className="font-semibold">{t ? t("Proposal.preview.title","Editable Proposal Preview") : "Editable Proposal Preview"}</h3>
                   <Button 
                     onClick={handleSaveBidChanges}
                     disabled={savingBid}
@@ -1333,24 +1411,27 @@ export default function Proposal() {
                     {savingBid ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Saving...
+                        {t ? t("Proposal.preview.saving","Saving...") : "Saving..."}
                       </>
                     ) : (
                       <>
                         <Save className="h-4 w-4" />
-                        Save Changes
+                        {t ? t("Proposal.preview.save","Save Changes") : "Save Changes"}
                       </>
                     )}
                   </Button>
                 </div>
                 <Textarea
-                  value={editableBidContent}
-                  onChange={(e) => setEditableBidContent(e.target.value)}
+                  value={t ? t("Proposal.bid.original", editableBidContent) : editableBidContent}
+                  onChange={(e) => {
+                    registerText && registerText("Proposal.bid.original", e.target.value);
+                    setEditableBidContent(e.target.value);
+                  }}
                   className="min-h-[600px] font-mono text-sm leading-relaxed"
-                  placeholder="Edit your proposal content here..."
+                  placeholder={t ? t("Proposal.preview.placeholder","Edit your proposal content here...") : "Edit your proposal content here..."}
                 />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Make any necessary edits to your proposal. Click 'Save Changes' to update. PDF/Word downloads will use the latest saved version.
+                  {t ? t("Proposal.preview.instructions","Make any necessary edits to your proposal. Click 'Save Changes' to update. PDF/Word downloads will use the latest saved version.") : "Make any necessary edits to your proposal. Click 'Save Changes' to update. PDF/Word downloads will use the latest saved version."}
                 </p>
               </div>
             </TabsContent>
@@ -1364,7 +1445,7 @@ export default function Proposal() {
           transition={{ delay: 0.3 }}
           className="bg-card rounded-xl border border-border p-4"
         >
-          <h3 className="font-semibold mb-4">Version History</h3>
+          <h3 className="font-semibold mb-4">{t ? t("Proposal.version.title","Version History") : "Version History"}</h3>
           <div className="space-y-2">
             {versions.map((v) => (
               <div
@@ -1374,7 +1455,7 @@ export default function Proposal() {
                 <div className="flex items-center gap-4">
                   <Badge variant="outline">{v.version}</Badge>
                   <span className="text-sm">{v.date}</span>
-                  <span className="text-sm text-muted-foreground">by {v.author}</span>
+                  <span className="text-sm text-muted-foreground">{t ? t("Proposal.version.by","by {author}").replace('{author}', v.author) : `by ${v.author}`}</span>
                 </div>
                 <Badge
                   className={
@@ -1383,7 +1464,7 @@ export default function Proposal() {
                       : "bg-muted text-muted-foreground"
                   }
                 >
-                  {v.status}
+                  {t ? t(`Proposal.version.status.${v.status}`, v.status) : v.status}
                 </Badge>
               </div>
             ))}
@@ -1399,16 +1480,16 @@ export default function Proposal() {
         >
           <Button variant="outline">
             <Save className="h-4 w-4 mr-2" />
-            Save Draft
+            {t ? t("Proposal.actions.saveDraft","Save Draft") : "Save Draft"}
           </Button>
           <div className="flex gap-3">
             <Button variant="outline" onClick={handleExportPDF}>
               <Download className="h-4 w-4 mr-2" />
-              Export PDF
+              {t ? t("Proposal.actions.exportPDF","Export PDF") : "Export PDF"}
             </Button>
             <Button variant="outline" onClick={handleExportWord}>
               <FileText className="h-4 w-4 mr-2" />
-              Export Word
+              {t ? t("Proposal.actions.exportWord","Export Word") : "Export Word"}
             </Button>
             <Button 
               variant="outline" 
@@ -1418,18 +1499,18 @@ export default function Proposal() {
               {isExportingPPT ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Exporting...
+                  {t ? t("Proposal.actions.exporting","Exporting...") : "Exporting..."}
                 </>
               ) : (
                 <>
                   <FileText className="h-4 w-4 mr-2" />
-                  Download PPT
+                  {t ? t("Proposal.actions.downloadPPT","Download PPT") : "Download PPT"}
                 </>
               )}
             </Button>
             <Button onClick={handleMarkReadyToSubmit}>
               <Send className="h-4 w-4 mr-2" />
-              Mark Ready to Submit
+              {t ? t("Proposal.actions.markReady","Mark Ready to Submit") : "Mark Ready to Submit"}
             </Button>
           </div>
         </motion.div>
@@ -1439,7 +1520,7 @@ export default function Proposal() {
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0">
             {/* Gmail Header */}
             <div className="bg-[#404040] text-white px-4 py-3 flex items-center justify-between">
-              <DialogTitle className="text-base font-medium">New Message</DialogTitle>
+              <DialogTitle className="text-base font-medium">{t ? t("Proposal.email.newMessage","New Message") : "New Message"}</DialogTitle>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1455,7 +1536,7 @@ export default function Proposal() {
               <div className="p-4 space-y-3">
                 {/* To Field */}
                 <div className="flex items-center gap-2 border-b pb-2">
-                  <span className="text-sm text-muted-foreground w-16">To:</span>
+                  <span className="text-sm text-muted-foreground w-16">{t ? t("Proposal.email.to","To:") : "To:"}</span>
                   <Input
                     type="email"
                     value={emailData.to}

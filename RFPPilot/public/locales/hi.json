@@ -1,0 +1,18 @@
+{
+  "TopBar.searchPlaceholder": "RFP, SKU खोजें...",
+  "TopBar.loggedInAs": "इस रूप में लॉग इन किया गया:",
+  "TopBar.logout": "लॉगआउट",
+  "StrategicInsights.title": "रणनीतिक अंतर्दृष्टि",
+  "StrategicInsights.winProbabilityPredictor": "विन प्रोबेबिलिटी प्रेडिक्टर",
+  "StrategicInsights.winProbabilityDesc": "वर्तमान RFP और ऐतिहासिक प्रदर्शन के आधार पर AI- संचालित भविष्यवाणी",
+  "StrategicInsights.winProbability": "जीतने की संभावना",
+  "StrategicInsights.refreshAnalysis": "विश्लेषण को ताज़ा करें",
+  "Dashboard.title": "डैशबोर्ड",
+  "Dashboard.newRFPs": "आज खोजे गए 3 नए RFP",
+  "Dashboard.reviewNewRfps": "नए RFP की समीक्षा करें",
+  "Proposal.changesSavedTitle": "परिवर्तन सहेजे गए",
+  "Proposal.changesSavedDesc": "आपके प्रस्ताव संपादन सफलतापूर्वक सहेज लिए गए हैं।",
+  "Masteragent.reportTitle": "RFP रणनीतिक विश्लेषण रिपोर्ट",
+  "NotFound.message": "उफ़! पेज नहीं मिला",
+  "NotFound.returnHome": "घर पर लौटें"
+}

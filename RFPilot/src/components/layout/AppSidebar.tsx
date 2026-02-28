@@ -16,20 +16,21 @@ import {
   Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useT";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "RFP Discovery", href: "/discovery", icon: Search },
-  { name: "Strategic Orchestrator", href: "/master-agent", icon: Zap },
-  { name: "AI Analysis Workspace", href: "/analysis", icon: Brain },
- 
-  { name: "Pricing & Summary", href: "/pricing", icon: DollarSign },
-  { name: "Proposal Builder", href: "/proposal", icon: FileText },
-  { name: "SKU Gap Intelligence", href: "/sku-gap-analytics", icon: Package },
-  { name: "Strategic Insights", href: "/strategic-insights", icon: Target },
-  { name: "Notifications", href: "/notifications", icon: Bell, badge: 3 },
-  { name: "Product Repository", href: "/repository", icon: Database },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { key: "Nav.Dashboard", name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { key: "Nav.Discovery", name: "RFP Discovery", href: "/discovery", icon: Search },
+  { key: "Nav.MasterAgent", name: "Strategic Orchestrator", href: "/master-agent", icon: Zap },
+  { key: "Nav.Analysis", name: "AI Analysis Workspace", href: "/analysis", icon: Brain },
+
+  { key: "Nav.Pricing", name: "Pricing & Summary", href: "/pricing", icon: DollarSign },
+  { key: "Nav.Proposal", name: "Proposal Builder", href: "/proposal", icon: FileText },
+  { key: "Nav.SkuGap", name: "SKU Gap Intelligence", href: "/sku-gap-analytics", icon: Package },
+  { key: "Nav.StrategicInsights", name: "Strategic Insights", href: "/strategic-insights", icon: Target },
+  { key: "Nav.Notifications", name: "Notifications", href: "/notifications", icon: Bell, badge: 3 },
+  { key: "Nav.Repository", name: "Product Repository", href: "/repository", icon: Database },
+  { key: "Nav.Settings", name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -49,8 +50,8 @@ export function AppSidebar() {
           <Sparkles className="h-5 w-5 text-sidebar-primary-foreground" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-sidebar-foreground">Agentic RFP</h1>
-          <p className="text-xs text-sidebar-muted">Response Platform</p>
+          <h1 className="text-lg font-bold text-sidebar-foreground">{useT().t("Sidebar.brand","Agentic RFP")}</h1>
+          <p className="text-xs text-sidebar-muted">{useT().t("Sidebar.tagline","Response Platform")}</p>
         </div>
       </div>
 
@@ -74,9 +75,9 @@ export function AppSidebar() {
                   transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
                 />
               )}
-              <span className="relative z-10 flex items-center gap-3">
+                <span className="relative z-10 flex items-center gap-3">
                 <item.icon className="h-5 w-5" />
-                <span>{item.name}</span>
+                <span>{useT().t(item.key || item.name, item.name)}</span>
                 {item.badge && (
                   <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-medium text-destructive-foreground">
                     {item.badge}
@@ -92,13 +93,13 @@ export function AppSidebar() {
       <div className="px-4 py-4 border-t border-sidebar-border">
         <div className="rounded-lg bg-sidebar-accent p-4">
           <p className="text-xs font-medium text-sidebar-muted mb-3 uppercase tracking-wider">
-            Agent Status
+            {useT().t("Sidebar.agentStatus","Agent Status")}
           </p>
           <div className="space-y-2">
-            <AgentStatus name="Sales Agent" status="active" color="bg-agent-sales" />
-            <AgentStatus name="Technical Agent" status="idle" color="bg-agent-technical" />
-            <AgentStatus name="Pricing Agent" status="idle" color="bg-agent-pricing" />
-            <AgentStatus name="Master Agent" status="ready" color="bg-agent-master" />
+            <AgentStatus nameKey="Agent.sales" nameFallback="Sales Agent" status="active" color="bg-agent-sales" />
+            <AgentStatus nameKey="Agent.technical" nameFallback="Technical Agent" status="idle" color="bg-agent-technical" />
+            <AgentStatus nameKey="Agent.pricing" nameFallback="Pricing Agent" status="idle" color="bg-agent-pricing" />
+            <AgentStatus nameKey="Agent.master" nameFallback="Master Agent" status="ready" color="bg-agent-master" />
           </div>
         </div>
       </div>
@@ -107,7 +108,7 @@ export function AppSidebar() {
       <div className="px-4 py-4 border-t border-sidebar-border">
         <button className="sidebar-link w-full text-sidebar-muted hover:text-sidebar-foreground">
           <LogOut className="h-5 w-5" />
-          <span>Sign Out</span>
+          <span>{useT().t("Sidebar.signOut","Sign Out")}</span>
         </button>
       </div>
     </motion.aside>
@@ -115,14 +116,17 @@ export function AppSidebar() {
 }
 
 function AgentStatus({
-  name,
+  nameKey,
+  nameFallback,
   status,
   color,
 }: {
-  name: string;
+  nameKey?: string;
+  nameFallback?: string;
   status: "active" | "idle" | "ready";
   color: string;
 }) {
+  const { t } = useT();
   return (
     <div className="flex items-center gap-2">
       <div className="relative">
@@ -131,7 +135,7 @@ function AgentStatus({
           <div className={cn("absolute inset-0 h-2 w-2 rounded-full animate-ping", color, "opacity-50")} />
         )}
       </div>
-      <span className="text-xs text-sidebar-foreground/70">{name}</span>
+      <span className="text-xs text-sidebar-foreground/70">{t(nameKey || nameFallback || "", nameFallback)}</span>
       <span
         className={cn(
           "ml-auto text-xs",
@@ -140,7 +144,7 @@ function AgentStatus({
           status === "ready" && "text-agent-master"
         )}
       >
-        {status}
+        {t(`Agent.status.${status}`, status)}
       </span>
     </div>
   );

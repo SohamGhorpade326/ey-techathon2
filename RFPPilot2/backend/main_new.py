@@ -10,8 +10,6 @@ import hashlib
 from datetime import datetime
 import base64
 import os
-import tempfile
-import shutil
 from dotenv import load_dotenv
 import smtplib
 from email.message import EmailMessage
@@ -190,10 +188,6 @@ def _replace_placeholders_in_table_cells(shape, replacements: Dict[str, Any]) ->
             tf = table.cell(r, c).text_frame
             _replace_placeholders_in_text_frame(tf, {k: str(v) for k, v in replacements.items()})
 
-
-# Poppler path for pdf2image (Windows)
-POPPLER_PATH = os.getenv("POPPLER_PATH", r"C:\poppler\poppler-25.12.0\Library\bin")
-
 app = FastAPI(title="Agentic RFP Backend")
 
 # CORS
@@ -204,6 +198,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from translator import translate_text
+
+# Translation endpoint
+@app.post("/translate")
+def translate_api(data: dict):
+    text = data.get("text", "")
+    lang = data.get("lang", "hi")
+
+    translated = translate_text(text, lang)
+
+    return {"translated": translated}
+
+
+@app.post("/translate-batch")
+def translate_batch(data: dict):
+    """Translate a batch of texts. Expects payload: { items: [{ key: <key>, text: <text> }, ...], lang: 'hi' }
+    Returns: { translations: { <key>: <translated>, ... } }
+    """
+    items = data.get("items", []) or []
+    lang = data.get("lang", "hi")
+    translations = {}
+    try:
+        for it in items:
+            k = it.get("key")
+            txt = it.get("text", "")
+            if k is None:
+                continue
+            translations[k] = translate_text(txt, lang)
+    except Exception:
+        # best-effort: return whatever we translated so far
+        pass
+    return {"translations": translations}
 
 # Task status store
 task_status: Dict[str, str] = {}
@@ -345,55 +371,16 @@ def run_pipeline_bg(task_id: str, skip_mode: bool = False):
             print(f"[Pipeline Skip Mode] ✅ Loaded {len(sales_data)} existing RFP(s)")
             print(f"[Pipeline Skip Mode] ✅ Restored {len(pdf_paths)} PDF path(s) and {len(pdf_text_cache)} cached text(s)")
         else:
-            # Normal mode: Save existing Gmail RFPs before clearing
-            existing_gmail_rfps = []
-            existing_sales = get_sales_output()
-            
-            if existing_sales:
-                # Extract Gmail RFPs (both gmail-pdf and gmail sources)
-                existing_gmail_rfps = [
-                    rfp for rfp in existing_sales 
-                    if rfp.get("source") in ["gmail", "gmail-pdf"]
-                ]
-                print(f"[Pipeline] 🔄 Preserving {len(existing_gmail_rfps)} existing Gmail RFP(s) before clearing")
-            
-            # Clear all other data
+            # Normal mode: Clear all and run Sales Agent
             clear_all()
             
             # Clear skipped RFP IDs when starting fresh (allows re-evaluation of all RFPs)
             clear_skipped_rfp_ids()
             print("[Pipeline] ✅ Cleared skipped RFP IDs - starting fresh discovery")
             
-            # Sales Agent (process website PDFs)
+            # Sales Agent (process website PDFs first)
             state = rfp_module.sales_agent_node(state)
             sales_data = state.get("sales_output", [])
-            
-            # Merge preserved Gmail RFPs with newly scraped website RFPs
-            if existing_gmail_rfps:
-                print(f"[Pipeline] 🔄 Merging {len(existing_gmail_rfps)} Gmail RFPs with {len(sales_data)} website RFPs")
-                
-                # Deduplicate by rfp_id (prefer newer data if duplicate)
-                merged_rfps = {}
-                
-                # First add existing Gmail RFPs
-                for rfp in existing_gmail_rfps:
-                    rfp_id = rfp.get("rfp_id")
-                    if rfp_id:
-                        merged_rfps[rfp_id] = rfp
-                
-                # Then add/overwrite with website RFPs
-                for rfp in sales_data:
-                    rfp_id = rfp.get("rfp_id")
-                    if rfp_id:
-                        if rfp_id in merged_rfps:
-                            print(f"[Pipeline] ⚠️ Duplicate RFP ID {rfp_id} - using website version")
-                        merged_rfps[rfp_id] = rfp
-                
-                # Convert back to list
-                sales_data = list(merged_rfps.values())
-                state["sales_output"] = sales_data
-                print(f"[Pipeline] ✅ Merged total: {len(sales_data)} unique RFPs")
-
 
         # ------------------------------------------------------------------
         # Gmail Integration: Process Gmail emails (only in normal mode, not skip mode)
@@ -826,319 +813,6 @@ def ingest_gmail_rfp_event(event: GmailRfpEvent):
         }
         add_notification(notif)
     return {"status": "ok", "inserted": inserted}
-
-
-@app.post("/integrations/gmail/rfp-pdf")
-async def ingest_gmail_rfp_pdf(
-    pdf: UploadFile = File(...),
-    metadata: str = Form(...)
-):
-    """
-    Process RFP PDF attachments from Gmail.
-    Extracts text using OCR, parses RFP details, and stores in database.
-    Uses same item extraction logic as dummy website RFPs.
-    """
-    import json
-    from datetime import datetime, timezone
-    import wonky_SBERT_copilot as rfp_module
-    
-    meta = json.loads(metadata)
-    message_id = meta.get("message_id", "")
-    sender = meta.get("sender", "")
-    subject = meta.get("subject", "")
-    filename = meta.get("filename", "unknown.pdf")
-    received_ts = meta.get("received_timestamp", datetime.now(timezone.utc).isoformat())
-    
-    print(f"[Gmail PDF] Received PDF: '{filename}' from {sender}")
-    print(f"[Gmail PDF] Subject: {subject}")
-    
-    # Save PDF to temp file for processing
-    temp_pdf_path = None
-    try:
-        # Create temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            temp_pdf_path = tmp.name
-            shutil.copyfileobj(pdf.file, tmp)
-        
-        print(f"[Gmail PDF] Saved to temp: {temp_pdf_path}")
-        
-        # Use OCR logic matching wonky_SBERT_copilot (same as dummy website)
-        try:
-            import pdfplumber
-            from pdf2image import convert_from_path
-            import pytesseract
-            
-            # STEP 1: Try native text extraction first (fast)
-            with pdfplumber.open(temp_pdf_path) as pdf_doc:
-                total_pages = len(pdf_doc.pages)
-                # Extract from first 10 pages for quick check
-                native_pages = [p.extract_text() or "" for p in pdf_doc.pages[:min(10, total_pages)]]
-                combined_text = "\n".join(native_pages)
-            
-            print(f"[Gmail PDF] Native extraction: {len(combined_text)} chars from {min(10, total_pages)} pages")
-            
-            # STEP 2: If insufficient, use OCR (threshold: 50 chars like wonky_SBERT_copilot)
-            if len(combined_text.strip()) < 50:
-                print(f"[Gmail PDF] ⚠️ Native text insufficient (<50 chars), triggering OCR...")
-                print(f"[Gmail PDF] Converting PDF to images (DPI=150, pages={total_pages})...")
-                
-                # Convert all pages to images for OCR
-                try:
-                    images = convert_from_path(
-                        temp_pdf_path,
-                        dpi=150,
-                        poppler_path=POPPLER_PATH
-                    )
-                    
-                    print(f"[Gmail PDF] Converted {len(images)} pages to images, starting OCR...")
-                    
-                    # OCR each page
-                    ocr_texts = []
-                    for idx, img in enumerate(images, 1):
-                        try:
-                            text = pytesseract.image_to_string(img)
-                            ocr_texts.append(text)
-                            print(f"[Gmail PDF] OCR page {idx}/{len(images)}: {len(text)} chars")
-                        except Exception as ocr_err:
-                            print(f"[Gmail PDF] ⚠️ OCR failed for page {idx}: {ocr_err}")
-                            ocr_texts.append("")
-                        finally:
-                            img.close()
-                    
-                    combined_text = "\n".join(ocr_texts)
-                    print(f"[Gmail PDF] ✅ OCR complete: {len(combined_text)} total characters")
-                    
-                except Exception as convert_err:
-                    print(f"[Gmail PDF] ❌ PDF to image conversion failed: {convert_err}")
-                    print(f"[Gmail PDF] Falling back to native text extraction")
-            else:
-                print(f"[Gmail PDF] ✓ Native text sufficient ({len(combined_text)} chars)")
-            
-            print(f"[Gmail PDF] Final text length: {len(combined_text)} characters")
-            print(f"[Gmail PDF] Text preview: {combined_text[:300].replace(chr(10), ' ')[:200]}...")
-            
-            # Extract RFP fields using same logic as dummy website
-            try:
-                fields = rfp_module.extract_fields_single_call(combined_text)
-                print(f"[Gmail PDF] ✅ Raw extracted fields: {fields}")
-                
-                # FIX: Handle rfp_id if it's an array/list (take first element)
-                raw_rfp_id = fields.get('rfp_id', 'N/A')
-                if isinstance(raw_rfp_id, list) and len(raw_rfp_id) > 0:
-                    fields['rfp_id'] = raw_rfp_id[0]
-                    print(f"[Gmail PDF] Converted array rfp_id to: {fields['rfp_id']}")
-                elif isinstance(raw_rfp_id, list) and len(raw_rfp_id) == 0:
-                    fields['rfp_id'] = f"GMAIL-PDF-{hashlib.md5(subject.encode()).hexdigest()[:8].upper()}"
-                    print(f"[Gmail PDF] Empty rfp_id array, generated: {fields['rfp_id']}")
-                
-                print(f"[Gmail PDF] Final RFP ID: {fields.get('rfp_id', 'N/A')}")
-                
-                # Apply ground truth fields if extraction returned "Not Found"
-                rfp_id_for_gt = fields.get('rfp_id', '')
-                if isinstance(rfp_id_for_gt, list):
-                    rfp_id_for_gt = rfp_id_for_gt[0] if len(rfp_id_for_gt) > 0 else ''
-                
-                if rfp_id_for_gt and rfp_id_for_gt != 'N/A':
-                    gt_fields = rfp_module.get_ground_truth_fields(rfp_id_for_gt)
-                    if gt_fields:
-                        print(f"[Gmail PDF] 🎯 Found ground truth fields for {rfp_id_for_gt}")
-                        for key, value in gt_fields.items():
-                            if fields.get(key) == "Not Found" or not fields.get(key):
-                                fields[key] = value
-                                print(f"[Gmail PDF] ✅ Applied ground truth {key}: {value}")
-                
-            except Exception as field_err:
-                print(f"[Gmail PDF] Field extraction failed: {field_err}")
-                # Fallback: use basic fields with better ID generation
-                import hashlib
-                rfp_id = f"GMAIL-PDF-{hashlib.md5(subject.encode()).hexdigest()[:8].upper()}"
-                fields = {
-                    "rfp_id": rfp_id,
-                    "title": subject or filename,
-                    "buyer": sender.split("@")[0] if sender else "Unknown",
-                    "domain": "General",
-                    "deadline": "Not specified",
-                    "estimated_value": "Not specified",
-                    "priority": "Medium"
-                }
-            
-            # Extract items using same logic as Gmail text emails
-            try:
-                print(f"[Gmail PDF] Calling extract_items_from_text with {len(combined_text)} chars...")
-                extracted_items = rfp_module.extract_items_from_text(combined_text)
-                print(f"[Gmail PDF] extract_items_from_text returned: {len(extracted_items)} items")
-                
-                if not extracted_items or len(extracted_items) == 0:
-                    print("[Gmail PDF] ⚠️ No items extracted from text, trying ground truth...")
-                    
-                    # Clean the RFP ID for ground truth lookup
-                    rfp_id_for_gt = fields.get("rfp_id", "")
-                    if isinstance(rfp_id_for_gt, list):
-                        rfp_id_for_gt = rfp_id_for_gt[0] if len(rfp_id_for_gt) > 0 else ""
-                    
-                    print(f"[Gmail PDF] Looking for ground truth with RFP ID: '{rfp_id_for_gt}'")
-                    extracted_items = rfp_module.get_ground_truth_items(rfp_id_for_gt)
-                    if extracted_items:
-                        print(f"[Gmail PDF] ✅ Found {len(extracted_items)} ground truth items!")
-                    else:
-                        print(f"[Gmail PDF] ⚠️ No ground truth found for '{rfp_id_for_gt}'")
-                elif len(extracted_items) < 5:
-                    # If very few items extracted, also try ground truth as it might be more accurate
-                    print(f"[Gmail PDF] Only {len(extracted_items)} items from text extraction, checking ground truth...")
-                    rfp_id_for_gt = fields.get("rfp_id", "")
-                    if isinstance(rfp_id_for_gt, list):
-                        rfp_id_for_gt = rfp_id_for_gt[0] if len(rfp_id_for_gt) > 0 else ""
-                    
-                    gt_items = rfp_module.get_ground_truth_items(rfp_id_for_gt)
-                    if gt_items and len(gt_items) > len(extracted_items):
-                        print(f"[Gmail PDF] ✅ Using ground truth instead: {len(gt_items)} items vs {len(extracted_items)}")
-                        extracted_items = gt_items
-                
-                print(f"[Gmail PDF] 📋 Final item count: {len(extracted_items)}")
-                if extracted_items:
-                    print(f"[Gmail PDF] 📋 Items: {extracted_items}")
-                else:
-                    print(f"[Gmail PDF] ⚠️ WARNING: No items extracted!")
-                    
-            except Exception as item_err:
-                print(f"[Gmail PDF] ❌ Item extraction failed: {item_err}")
-                import traceback
-                traceback.print_exc()
-                extracted_items = []
-            
-            # Create structured item list (same format as Gmail text emails)
-            extracted_item_list_structured = [
-                {"item_name": item, "quantity": "1", "unit": "Nos", "specs": ""}
-                for item in extracted_items
-            ]
-            
-            # Detect domain from text content
-            text_lower = combined_text.lower()
-            if any(k in text_lower for k in ["painting", "repair work", "civil", "plaster", "flats"]):
-                fields["domain"] = "Civil/General"
-            elif any(k in text_lower for k in ["cable", "xlpe", "power assembly", "electrical", "kv"]):
-                fields["domain"] = "Electrical"
-            
-            # Calculate priority and days remaining based on deadline
-            from datetime import datetime
-            priority = "Medium"
-            days_remaining = None
-            deadline_str = fields.get("submission_deadline", "Not Found")
-            
-            if deadline_str and deadline_str != "Not Found":
-                try:
-                    # Try multiple date formats
-                    deadline_dt = None
-                    for fmt in ["%d-%m-%Y %H:%M", "%d.%m.%Y, %I:%M %p", "%d.%m.%Y", "%d-%m-%Y", "%Y-%m-%d"]:
-                        try:
-                            deadline_dt = datetime.strptime(deadline_str.split(",")[0].strip() if "," in deadline_str else deadline_str.split()[0].strip(), fmt.split()[0])
-                            break
-                        except:
-                            continue
-                    
-                    if deadline_dt:
-                        days_remaining = (deadline_dt - datetime.now()).days
-                        
-                        # Assign priority based on days remaining
-                        if days_remaining < 0:
-                            priority = "Expired"
-                        elif days_remaining <= 2:
-                            priority = "Critical"
-                        elif days_remaining <= 7:
-                            priority = "High"
-                        elif days_remaining <= 30:
-                            priority = "Medium"
-                        else:
-                            priority = "Low"
-                        
-                        print(f"[Gmail PDF] 📅 Calculated priority: {priority} ({days_remaining} days remaining)")
-                except Exception as date_err:
-                    print(f"[Gmail PDF] ⚠️ Date parsing failed: {date_err}")
-                    priority = "Medium"
-                    days_remaining = None
-            
-            # Create RFP entry matching sales_agent_node format
-            rfp_id = fields.get("rfp_id", f"GMAIL-PDF-{message_id[:8]}")
-            rfp_entry = {
-                "rfp_id": rfp_id,
-                "rfp_title": fields.get("rfp_title", subject or filename),
-                "buyer": fields.get("buyer", sender),
-                "domain": fields.get("domain", "General"),
-                "submission_deadline": fields.get("submission_deadline", "Not Found"),
-                "estimated_project_value": fields.get("estimated_project_value", "Not Found"),
-                "priority": priority,
-                "status": "Extracted",
-                "days_remaining": days_remaining,
-                "scope_items": f"{len(extracted_items)} items",
-                "tender_source": "Gmail PDF Attachment",
-                "extracted_item_list": extracted_items,
-                "extracted_item_list_structured": extracted_item_list_structured,
-                "gmail_rfp_text": combined_text,  # Store full text for Technical Agent
-                "source": "gmail-pdf",
-                "gmail_message_id": message_id,
-                "gmail_received_timestamp": received_ts,
-                "original_filename": filename
-            }
-            
-            # Append to existing sales output (with deduplication)
-            existing_sales = get_sales_output()
-            if existing_sales is None:
-                existing_sales = []
-            
-            # Check if RFP already exists (by rfp_id)
-            existing_index = None
-            for idx, existing_rfp in enumerate(existing_sales):
-                if existing_rfp.get("rfp_id") == rfp_id:
-                    existing_index = idx
-                    break
-            
-            if existing_index is not None:
-                print(f"[Gmail PDF] ⚠️ RFP {rfp_id} already exists at index {existing_index}, updating instead of duplicating")
-                existing_sales[existing_index] = rfp_entry
-            else:
-                existing_sales.append(rfp_entry)
-                print(f"[Gmail PDF] ✅ Added new RFP to sales output: {rfp_id} with {len(extracted_items)} items")
-            
-            save_sales_output(existing_sales)
-            
-            # Create notification
-            notif = {
-                "id": str(uuid.uuid4()),
-                "type": "discovery",
-                "title": f"📎 PDF RFP: {rfp_entry['rfp_title']}",
-                "description": f"From: {sender} | PDF: {filename} | Items: {len(extracted_items)}",
-                "body": f"RFP ID: {rfp_id}\nBuyer: {rfp_entry['buyer']}\nDeadline: {rfp_entry['submission_deadline']}\nValue: {rfp_entry['estimated_project_value']}\nItems: {len(extracted_items)}",
-                "snippet": combined_text[:200],
-                "received_timestamp": received_ts,
-                "read": False,
-                "source": "gmail-pdf",
-                "message_id": message_id,
-                "rfp_id": rfp_id,
-            }
-            add_notification(notif)
-            
-            print(f"[Gmail PDF] ✅ Successfully processed: {rfp_id}")
-            print(f"[Gmail PDF] Items: {extracted_items[:5]}")
-            
-            return {
-                "status": "success",
-                "rfp_id": rfp_id,
-                "items_extracted": len(extracted_items),
-                "message": f"Gmail PDF RFP processed with {len(extracted_items)} items"
-            }
-            
-        except Exception as proc_err:
-            print(f"[Gmail PDF] ❌ Processing error: {proc_err}")
-            import traceback
-            traceback.print_exc()
-            return {"status": "error", "message": str(proc_err)}
-    finally:
-        # Clean up temp file
-        if temp_pdf_path and os.path.exists(temp_pdf_path):
-            try:
-                os.remove(temp_pdf_path)
-            except:
-                pass
 
 
 @app.get("/notifications")

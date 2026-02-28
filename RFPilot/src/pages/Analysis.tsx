@@ -29,10 +29,12 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useT";
 
 const API = "http://127.0.0.1:8000";
 
 export default function Analysis() {
+  const { t, registerText, lang } = useT();
   const [expandedRows, setExpandedRows] = useState<number[]>([]);
   const [technicalData, setTechnicalData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -57,9 +59,47 @@ export default function Analysis() {
       });
   }, []);
 
+  // register dynamic texts for translation once data arrives
+  useEffect(() => {
+    if (!technicalData) return;
+    try {
+      registerText && registerText("Analysis.title", "Technical Spec-Matching Workspace");
+      registerText && registerText("Analysis.aiWorkspace", "AI Analysis Workspace");
+      registerText && registerText("Analysis.noData", "No technical analysis data available. Please run the Sales Agent first.");
+      registerText && registerText("Analysis.automationInsight", "Automation Insight: Technical SKU matching is the most time-consuming manual task — now automated. Review and confirm matches below.");
+
+      // header and badges
+      registerText && registerText("Analysis.badge.technicalAgent", "Technical Agent");
+
+      const items = technicalData.items || [];
+      items.forEach((item: any, idx: number) => {
+        const base = `Technical.${technicalData.rfp_id}.item.${idx}`;
+        registerText && registerText(`${base}.item_name`, item.item_name || "");
+        registerText && registerText(`${base}.required_specs_text`, item.required_specs_text || "");
+        registerText && registerText(`${base}.best_match_sku`, item.best_match_sku || "");
+        registerText && registerText(`${base}.match_justification`, item.match_justification || "");
+
+        item.top_3_alternatives?.forEach((alt: any, aidx: number) => {
+          registerText && registerText(`${base}.alt.${aidx}.sku_description`, alt.sku_description || "");
+          registerText && registerText(`${base}.alt.${aidx}.price_per_unit`, String(alt.price_per_unit || ""));
+        });
+      });
+    } catch (e) {
+      // ignore registration errors
+    }
+  }, [technicalData, registerText]);
+
+  const localizeDigits = (v: string | number | undefined | null) => {
+    if (v === undefined || v === null) return '';
+    const s = String(v);
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    const map: Record<string,string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+    return s.replace(/[0-9]/g, d => map[d] || d);
+  }
+
   if (loading) {
     return (
-      <MainLayout title="Technical Spec-Matching Workspace">
+      <MainLayout title={t ? t("Analysis.title","Technical Spec-Matching Workspace") : "Technical Spec-Matching Workspace"}>
         <div className="flex h-[60vh] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -69,9 +109,9 @@ export default function Analysis() {
 
   if (!technicalData || !technicalData.items || technicalData.items.length === 0) {
     return (
-      <MainLayout title="Technical Spec-Matching Workspace">
+      <MainLayout title={t ? t("Analysis.title","Technical Spec-Matching Workspace") : "Technical Spec-Matching Workspace"}>
         <div className="text-center py-20">
-          <p className="text-muted-foreground">No technical analysis data available. Please run the Sales Agent first.</p>
+          <p className="text-muted-foreground">{t ? t("Analysis.noData","No technical analysis data available. Please run the Sales Agent first.") : "No technical analysis data available. Please run the Sales Agent first."}</p>
         </div>
       </MainLayout>
     );
@@ -123,10 +163,10 @@ export default function Analysis() {
 
   return (
     <MainLayout
-      title="Technical Spec-Matching Workspace"
+      title={t ? t("Analysis.title","Technical Spec-Matching Workspace") : "Technical Spec-Matching Workspace"}
       breadcrumbs={[
-        { name: "Dashboard", href: "/dashboard" },
-        { name: "AI Analysis Workspace" },
+        { name: t ? t("Nav.dashboard","Dashboard") : "Dashboard", href: "/dashboard" },
+        { name: t ? t("Analysis.aiWorkspace","AI Analysis Workspace") : "AI Analysis Workspace" },
       ]}
     >
       <div className="space-y-6">
@@ -138,15 +178,15 @@ export default function Analysis() {
         >
           <div>
             <p className="text-muted-foreground">
-              RFP {technicalData.rfp_id} - {technicalData.domain}
+              RFP {localizeDigits(technicalData.rfp_id)} - {t ? t(`Domain.${technicalData.domain}`, technicalData.domain) : technicalData.domain}
             </p>
             <div className="flex items-center gap-4 mt-2">
               <Badge variant="outline" className="bg-success/10 text-success border-success/30">
                 <Sparkles className="h-3 w-3 mr-1" />
-                Technical Agent {technicalData.status}
+                {t ? t("Analysis.badge.technicalAgent","Technical Agent") : "Technical Agent"} {t ? t(`Analysis.status.${technicalData.status}`, technicalData.status) : technicalData.status}
               </Badge>
               <span className="text-sm text-muted-foreground">
-                {items.length} items matched • Avg Spec-Match: {avgMatch}%
+                {localizeDigits(items.length)} {t ? t("Analysis.itemsMatched","items matched") : "items matched"} • {t ? t("Analysis.avgSpecMatch","Avg Spec-Match:") : "Avg Spec-Match:"} {localizeDigits(avgMatch)}%
               </span>
             </div>
           </div>
@@ -160,7 +200,7 @@ export default function Analysis() {
           className="bg-info/10 border border-info/30 rounded-lg p-4"
         >
           <p className="text-sm text-info">
-            <strong>Automation Insight:</strong> Technical SKU matching is the most time-consuming manual task — now automated. Review and confirm matches below.
+            <strong>{t ? t("Analysis.automationInsightStrong","Automation Insight:") : "Automation Insight:"}</strong> {t ? t("Analysis.automationInsight","Technical SKU matching is the most time-consuming manual task — now automated. Review and confirm matches below.") : "Technical SKU matching is the most time-consuming manual task — now automated. Review and confirm matches below."}
           </p>
         </motion.div>
 
@@ -173,15 +213,15 @@ export default function Analysis() {
         >
           <Table>
             <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="w-8"></TableHead>
-                <TableHead>Item Name</TableHead>
-                <TableHead>Required Technical Specs</TableHead>
-                <TableHead>Best Match SKU</TableHead>
-                <TableHead className="text-center">Spec-Match %</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-8"></TableHead>
+                  <TableHead>{t ? t("Analysis.col.itemName","Item Name") : "Item Name"}</TableHead>
+                  <TableHead>{t ? t("Analysis.col.requiredSpecs","Required Technical Specs") : "Required Technical Specs"}</TableHead>
+                  <TableHead>{t ? t("Analysis.col.bestMatch","Best Match SKU") : "Best Match SKU"}</TableHead>
+                  <TableHead className="text-center">{t ? t("Analysis.col.specMatch","Spec-Match %") : "Spec-Match %"}</TableHead>
+                  <TableHead className="text-center">{t ? t("Analysis.col.status","Status") : "Status"}</TableHead>
+                  <TableHead className="text-right">{t ? t("Analysis.col.actions","Actions") : "Actions"}</TableHead>
+                </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item: any, index: number) => (
@@ -202,16 +242,35 @@ export default function Analysis() {
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </motion.div>
                     </TableCell>
-                    <TableCell className="font-medium">{item.item_name}</TableCell>
+                    <TableCell className="font-medium">{t ? t(`Technical.${technicalData.rfp_id}.item.${index}.item_name`, item.item_name) : item.item_name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
-                      {item.required_specs_text}
+                      {t ? t(`Technical.${technicalData.rfp_id}.item.${index}.required_specs_text`, item.required_specs_text) : item.required_specs_text}
                     </TableCell>
                     <TableCell className="font-mono text-sm">
-                      {selectedSKUs[index] || item.best_match_sku}
+                      {(() => {
+                        const chosen = selectedSKUs[index] || item.best_match_sku;
+                        const altIdx = item.top_3_alternatives?.findIndex((a: any) => a.sku_code === chosen) ?? -1;
+                        if (altIdx >= 0) {
+                          const alt = item.top_3_alternatives[altIdx];
+                          const descKey = `Technical.${technicalData.rfp_id}.item.${index}.alt.${altIdx}.sku_description`;
+                          const desc = t ? t(descKey, alt.sku_description) : alt.sku_description;
+                          return (
+                            <div className="flex flex-col">
+                              <span className="font-mono text-sm">{chosen}</span>
+                              <span className="text-xs text-muted-foreground">{desc}</span>
+                            </div>
+                          );
+                        }
+
+                        // fallback to registered best_match_sku or raw code
+                        const bmKey = `Technical.${technicalData.rfp_id}.item.${index}.best_match_sku`;
+                        const bm = t ? t(bmKey, item.best_match_sku) : item.best_match_sku;
+                        return <span className="font-mono text-sm">{bm}</span>;
+                      })()}
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge className={cn("border", getMatchColor(item.spec_match_percent))}>
-                        {item.spec_match_percent?.toFixed(0)}%
+                        {localizeDigits(item.spec_match_percent?.toFixed(0))}%
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
@@ -226,7 +285,7 @@ export default function Analysis() {
                             e.stopPropagation();
                             showJustificationDialog(item);
                           }}
-                          title="View AI Justification"
+                          title={t ? t("Analysis.title.viewJustification","View AI Justification") : "View AI Justification"}
                         >
                           <Sparkles className="h-4 w-4 text-primary" />
                         </Button>
@@ -240,19 +299,19 @@ export default function Analysis() {
                             }}
                           >
                             <Eye className="h-4 w-4 mr-1" />
-                            Compare
+                            {t ? t("Analysis.action.compare","Compare") : "Compare"}
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowOverride(true);
-                          }}
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowOverride(true);
+                            }}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                          </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -270,7 +329,7 @@ export default function Analysis() {
                             <div className="p-4 bg-muted/20 space-y-3">
                               <p className="text-sm font-medium">Alternative SKU Matches:</p>
                               <div className="grid grid-cols-3 gap-3">
-                                {item.top_3_alternatives?.map((match: any, idx: number) => (
+                                  {item.top_3_alternatives?.map((match: any, idx: number) => (
                                   <motion.div
                                     key={match.sku_code}
                                     initial={{ opacity: 0, y: 10 }}
@@ -290,7 +349,7 @@ export default function Analysis() {
                                     <div className="flex items-center justify-between mb-2">
                                       <span className="font-mono text-sm">{match.sku_code}</span>
                                       <Badge className={cn("text-xs border", getMatchColor(match.spec_match_percent))}>
-                                        {match.spec_match_percent?.toFixed(0)}%
+                                        {localizeDigits(match.spec_match_percent?.toFixed(0))}%
                                       </Badge>
                                     </div>
                                     <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
@@ -300,10 +359,10 @@ export default function Analysis() {
                                       />
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-2 mb-1">
-                                      ₹{match.price_per_unit?.toLocaleString()}/unit
+                                      {t ? t("Analysis.pricePerUnit","₹{price}/unit").replace('{price}', localizeDigits(match.price_per_unit?.toLocaleString())) : `₹${localizeDigits(match.price_per_unit?.toLocaleString())}/unit`}
                                     </p>
                                     <p className="text-xs text-muted-foreground line-clamp-2">
-                                      {match.sku_description}
+                                      {t ? t(`Technical.${technicalData.rfp_id}.item.${index}.alt.${idx}.sku_description`, match.sku_description) : match.sku_description}
                                     </p>
                                   </motion.div>
                                 ))}
@@ -321,20 +380,20 @@ export default function Analysis() {
         </motion.div>
 
         {/* Actions */}
-        <motion.div
+          <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="flex items-center justify-between"
         >
           <p className="text-sm text-muted-foreground">
-            {Object.keys(selectedSKUs).length} of {items.length} items confirmed
+            {localizeDigits(Object.keys(selectedSKUs).length)} {t ? t("Analysis.of","of") : "of"} {localizeDigits(items.length)} {t ? t("Analysis.itemsConfirmed","items confirmed") : "items confirmed"}
           </p>
           <div className="flex gap-3">
-            <Button variant="outline">Save Draft</Button>
+            <Button variant="outline">{t ? t("Analysis.saveDraft","Save Draft") : "Save Draft"}</Button>
             <Button>
               <CheckCircle2 className="h-4 w-4 mr-2" />
-              Confirm Selected SKUs
+              {t ? t("Analysis.confirmSelected","Confirm Selected SKUs") : "Confirm Selected SKUs"}
             </Button>
           </div>
         </motion.div>
@@ -345,8 +404,8 @@ export default function Analysis() {
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Explainable AI: Match Justification
+                <Sparkles className="h-5 w-5 text-primary" />
+                {t ? t("Analysis.justification.title","Explainable AI: Match Justification") : "Explainable AI: Match Justification"}
             </DialogTitle>
           </DialogHeader>
           {selectedItemForJustification && (
@@ -355,19 +414,23 @@ export default function Analysis() {
               <div className="bg-success/5 border border-success/30 rounded-lg p-4">
                 <h3 className="font-semibold text-success mb-2 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />
-                  Primary Match: {selectedItemForJustification.best_match_sku}
+                  {t ? t("Analysis.primaryMatch","Primary Match:") : "Primary Match:"} {selectedItemForJustification.best_match_sku}
                 </h3>
                 <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line space-y-2">
-                  {selectedItemForJustification.match_justification?.split('**').map((part: string, idx: number) => (
-                    idx % 2 === 1 ? <strong key={idx} className="text-foreground">{part}</strong> : <span key={idx}>{part}</span>
-                  ))}
+                  {(() => {
+                    const itemsArr = technicalData?.items || [];
+                    const idx = itemsArr.findIndex((it: any) => it.best_match_sku === selectedItemForJustification.best_match_sku && it.item_name === selectedItemForJustification.item_name);
+                    const key = idx >= 0 ? `Technical.${technicalData.rfp_id}.item.${idx}.match_justification` : undefined;
+                    const text = key && t ? t(key, selectedItemForJustification.match_justification || '') : (selectedItemForJustification.match_justification || '');
+                    return text.split('**').map((part: string, i: number) => i % 2 === 1 ? <strong key={i} className="text-foreground">{part}</strong> : <span key={i}>{part}</span>);
+                  })()}
                 </div>
               </div>
 
               {/* Alternative Matches with Delta Explanations */}
               {selectedItemForJustification.top_3_skus && selectedItemForJustification.top_3_skus.length > 1 && (
                 <div>
-                  <h3 className="font-semibold text-foreground mb-3">Alternative Matches</h3>
+                  <h3 className="font-semibold text-foreground mb-3">{t ? t("Analysis.alternativeMatches","Alternative Matches") : "Alternative Matches"}</h3>
                   <div className="space-y-3">
                     {selectedItemForJustification.top_3_skus.slice(1).map((alt: any, idx: number) => (
                       <div key={alt.sku_code} className="bg-muted/30 border border-border rounded-lg p-4">
@@ -379,13 +442,17 @@ export default function Analysis() {
                             </Badge>
                           </div>
                           <Badge variant="outline" className="text-xs">
-                            Alternative #{idx + 2}
+                            {t ? t("Analysis.alternativeLabel","Alternative #{n}").replace('{n}', String(idx + 2)) : `Alternative #${idx + 2}`}
                           </Badge>
                         </div>
                         <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-                          {alt.delta_explanation?.split('**').map((part: string, i: number) => (
-                            i % 2 === 1 ? <strong key={i} className="text-foreground">{part}</strong> : <span key={i}>{part}</span>
-                          )) || "Alternative SKU with lower match score."}
+                          {(() => {
+                            const itemsArr = technicalData?.items || [];
+                            const idxItem = itemsArr.findIndex((it: any) => it.best_match_sku === selectedItemForJustification.best_match_sku && it.item_name === selectedItemForJustification.item_name);
+                            const key = (idxItem >= 0) ? `Technical.${technicalData.rfp_id}.item.${idxItem}.alt.${idx}.delta_explanation` : undefined;
+                            const text = key && t ? t(key, alt.delta_explanation || '') : (alt.delta_explanation || 'Alternative SKU with lower match score.');
+                            return text.split('**').map((part: string, i: number) => i % 2 === 1 ? <strong key={i} className="text-foreground">{part}</strong> : <span key={i}>{part}</span>);
+                          })()}
                         </div>
                       </div>
                     ))}
@@ -396,9 +463,7 @@ export default function Analysis() {
               {/* Technical Details */}
               <div className="border-t pt-4">
                 <p className="text-xs text-muted-foreground">
-                  <strong>Note:</strong> These justifications are generated by the Technical Agent's Parameter Rule Engine 
-                  and SBERT semantic matching system. Vector similarity scores confirm the alignment between RFP requirements 
-                  and catalog specifications.
+                  <strong>{t ? t("Analysis.note","Note:") : "Note:"}</strong> {t ? t("Analysis.noteText","These justifications are generated by the Technical Agent's Parameter Rule Engine and SBERT semantic matching system. Vector similarity scores confirm the alignment between RFP requirements and catalog specifications.") : "These justifications are generated by the Technical Agent's Parameter Rule Engine and SBERT semantic matching system. Vector similarity scores confirm the alignment between RFP requirements and catalog specifications."}
                 </p>
               </div>
             </div>
@@ -410,27 +475,27 @@ export default function Analysis() {
       <Dialog open={showComparison} onOpenChange={setShowComparison}>
         <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detailed Spec Comparison - {selectedItemForComparison?.item_name}</DialogTitle>
+            <DialogTitle>{t ? t("Analysis.comparisonTitle","Detailed Spec Comparison - {name}").replace('{name}', selectedItemForComparison?.item_name || '') : `Detailed Spec Comparison - ${selectedItemForComparison?.item_name}`}</DialogTitle>
           </DialogHeader>
           {selectedItemForComparison?.comparison_matrix && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Spec Parameter</TableHead>
-                  <TableHead>RFP Requirement</TableHead>
+                  <TableHead>{t ? t("Analysis.compare.specParam","Spec Parameter") : "Spec Parameter"}</TableHead>
+                  <TableHead>{t ? t("Analysis.compare.rfpReq","RFP Requirement") : "RFP Requirement"}</TableHead>
                   {selectedItemForComparison.comparison_matrix.comparison_rows[0]?.sku_1 && (
                     <TableHead>
-                      SKU #1 ({selectedItemForComparison.top_3_alternatives?.[0]?.spec_match_percent?.toFixed(0)}%)
+                      {t ? t("Analysis.compare.skuHeader","SKU #1 ({pct}%)").replace('{pct}', localizeDigits(selectedItemForComparison.top_3_alternatives?.[0]?.spec_match_percent?.toFixed(0))) : `SKU #1 (${localizeDigits(selectedItemForComparison.top_3_alternatives?.[0]?.spec_match_percent?.toFixed(0))}%)`}
                     </TableHead>
                   )}
                   {selectedItemForComparison.comparison_matrix.comparison_rows[0]?.sku_2 && (
                     <TableHead>
-                      SKU #2 ({selectedItemForComparison.top_3_alternatives?.[1]?.spec_match_percent?.toFixed(0)}%)
+                      {t ? t("Analysis.compare.skuHeader2","SKU #2 ({pct}%)").replace('{pct}', localizeDigits(selectedItemForComparison.top_3_alternatives?.[1]?.spec_match_percent?.toFixed(0))) : `SKU #2 (${localizeDigits(selectedItemForComparison.top_3_alternatives?.[1]?.spec_match_percent?.toFixed(0))}%)`}
                     </TableHead>
                   )}
                   {selectedItemForComparison.comparison_matrix.comparison_rows[0]?.sku_3 && (
                     <TableHead>
-                      SKU #3 ({selectedItemForComparison.top_3_alternatives?.[2]?.spec_match_percent?.toFixed(0)}%)
+                      {t ? t("Analysis.compare.skuHeader3","SKU #3 ({pct}%)").replace('{pct}', localizeDigits(selectedItemForComparison.top_3_alternatives?.[2]?.spec_match_percent?.toFixed(0))) : `SKU #3 (${localizeDigits(selectedItemForComparison.top_3_alternatives?.[2]?.spec_match_percent?.toFixed(0))}%)`}
                     </TableHead>
                   )}
                 </TableRow>
@@ -438,8 +503,18 @@ export default function Analysis() {
               <TableBody>
                 {selectedItemForComparison.comparison_matrix.comparison_rows.map((row: any, idx: number) => (
                   <TableRow key={idx}>
-                    <TableCell className="font-medium">{row.parameter}</TableCell>
-                    <TableCell className="bg-primary/5">{row.rfp_requirement}</TableCell>
+                    <TableCell className="font-medium">{(() => {
+                      const itemsArr = technicalData?.items || [];
+                      const idxItem = itemsArr.findIndex((it: any) => it.best_match_sku === selectedItemForComparison.best_match_sku && it.item_name === selectedItemForComparison.item_name);
+                      const key = (idxItem >= 0) ? `Technical.${technicalData.rfp_id}.item.${idxItem}.comparison.${idx}.parameter` : undefined;
+                      return key && t ? t(key, row.parameter) : row.parameter;
+                    })()}</TableCell>
+                    <TableCell className="bg-primary/5">{(() => {
+                      const itemsArr = technicalData?.items || [];
+                      const idxItem = itemsArr.findIndex((it: any) => it.best_match_sku === selectedItemForComparison.best_match_sku && it.item_name === selectedItemForComparison.item_name);
+                      const key = (idxItem >= 0) ? `Technical.${technicalData.rfp_id}.item.${idxItem}.comparison.${idx}.rfp_requirement` : undefined;
+                      return key && t ? t(key, row.rfp_requirement) : row.rfp_requirement;
+                    })()}</TableCell>
                     {row.sku_1 && (
                       <TableCell>
                         <div className="flex items-center gap-2">

@@ -1,10 +1,12 @@
 import { motion } from "framer-motion";
 import { Bell, Search, User, ChevronRight, LogOut } from "lucide-react";
+import ModeToggle from "@/components/ModeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { useT } from "@/hooks/useT";
 
 interface TopBarProps {
   title: string;
@@ -35,6 +37,16 @@ export function TopBar({ title, breadcrumbs = [] }: TopBarProps) {
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
   };
+
+  const { t, lang, setLang } = useT();
+  const { registerText } = useT();
+
+  // register component strings so TranslateProvider knows the English originals
+  useEffect(() => {
+    registerText("TopBar.searchPlaceholder", "Search RFPs, SKUs...");
+    registerText("TopBar.loggedInAs", "Logged in as:");
+    registerText("TopBar.logout", "Logout");
+  }, [registerText]);
 
   return (
     <motion.header
@@ -72,16 +84,30 @@ export function TopBar({ title, breadcrumbs = [] }: TopBarProps) {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search RFPs, SKUs..."
+            placeholder={t("TopBar.searchPlaceholder", "Search RFPs, SKUs...")}
             className="w-64 pl-9 bg-secondary/50 border-0 focus-visible:ring-1"
           />
         </div>
 
         {userRole && (
           <Badge variant="secondary" className="hidden md:flex">
-            Logged in as: {formatRole(userRole)}
+            {t("TopBar.loggedInAs", "Logged in as:")}&nbsp;{formatRole(userRole)}
           </Badge>
         )}
+
+        <ModeToggle />
+
+          {/* Language Dropdown */}
+        <select
+          value={lang}
+          onChange={(e) => setLang(e.target.value)}
+          className="border rounded px-2 py-1 text-sm bg-secondary"
+          style={{ marginRight: 8 }}
+        >
+          <option value="en">English</option>
+          <option value="hi">Hindi</option>
+          <option value="mr">Marathi</option>
+        </select>
 
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
@@ -98,7 +124,7 @@ export function TopBar({ title, breadcrumbs = [] }: TopBarProps) {
           variant="ghost"
           size="icon"
           onClick={handleLogout}
-          title="Logout"
+          title={t("TopBar.logout", "Logout")}
         >
           <LogOut className="h-5 w-5" />
         </Button>

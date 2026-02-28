@@ -18,7 +18,9 @@ import {
 } from "lucide-react";
 
 import { MainLayout } from "@/components/layout/MainLayout";
+import { useT } from "@/hooks/useT";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "@/providers/ThemeProvider";
 
 // Initialize Groq with your provided key
 const groq = new Groq({ 
@@ -27,6 +29,7 @@ const groq = new Groq({
 });
 
 export default function RFPDetails() {
+  const { t } = useT();
   const [rfp, setRfp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -38,6 +41,8 @@ export default function RFPDetails() {
 
   const { rfpId } = useParams();
   const decodedId = decodeURIComponent(rfpId || "");
+  const { theme } = useTheme();
+  const isLight = theme === "light";
 
   // In RFPDetails.tsx
 useEffect(() => {
@@ -176,7 +181,7 @@ Provide detailed analysis without using markdown formatting symbols. Use plain t
     printableWindow.document.write(`
       <html>
         <head>
-          <title>RFP Intelligence Report - ${rfp.rfp_id}</title>
+          <title>${t("Masteragent.reportTitle","RFP Intelligence Report")} - ${rfp.rfp_id}</title>
           <style>
             body { font-family: 'Segoe UI', sans-serif; padding: 40px; color: #1a1a1a; line-height: 1.6; }
             .header { border-bottom: 3px solid #10b981; padding-bottom: 10px; margin-bottom: 20px; }
@@ -186,7 +191,7 @@ Provide detailed analysis without using markdown formatting symbols. Use plain t
           </style>
         </head>
         <body>
-          <div class="header"><h1>RFP Intelligence Report</h1></div>
+          <div class="header"><h1>${t("Masteragent.reportTitle","RFP Intelligence Report")}</h1></div>
           <div class="meta">
             <strong>ID:</strong> ${rfp.rfp_id}<br/>
             <strong>Title:</strong> ${rfp.rfp_title}<br/>
@@ -222,8 +227,8 @@ Provide detailed analysis without using markdown formatting symbols. Use plain t
         <motion.div className="lg:col-span-2 card-elevated p-6">
           <div className="flex justify-between">
             <div>
-              <p className="text-sm font-mono text-muted-foreground">{decodedId}</p>
-              <h1 className="text-2xl font-bold mt-1">{rfp.rfp_title}</h1>
+                <p className={`text-sm font-mono ${isLight ? 'text-slate-600' : 'text-muted-foreground'}`}>{decodedId}</p>
+                <h1 className={`text-2xl font-bold mt-1 ${isLight ? 'text-slate-900' : ''}`}>{rfp.rfp_title}</h1>
             </div>
             <Button size="icon" variant="ghost" asChild>
               <a href={rfp.tender_source} target="_blank" rel="noreferrer"><ExternalLink className="h-5 w-5" /></a>
@@ -238,15 +243,15 @@ Provide detailed analysis without using markdown formatting symbols. Use plain t
           </div>
         </motion.div>
 
-        <motion.div className="card-elevated p-6 border-2 border-red-500 bg-red-500/5">
-          <div className="flex items-center gap-2 mb-4 text-red-500">
+        <motion.div className={`card-elevated p-6 border-2 ${isLight ? 'border-red-100 bg-red-50' : 'border-red-500 bg-red-500/5'}`}>
+          <div className={`flex items-center gap-2 mb-4 ${isLight ? 'text-red-700' : 'text-red-500'}`}>
             <AlertTriangle className="h-5 w-5" />
             <h3 className="font-semibold">Submission Deadline</h3>
           </div>
           <div className="text-center">
-            <p className="text-3xl font-bold text-red-500">{rfp.submission_deadline}</p>
+            <p className={`text-3xl font-bold ${isLight ? 'text-red-700' : 'text-red-500'}`}>{rfp.submission_deadline}</p>
             <div className="mt-4 flex justify-center">
-              <span className={`px-4 py-1 rounded-full text-sm font-semibold ${rfp.priority === "High" ? "bg-red-600 text-white" : "bg-yellow-400 text-black"}`}>
+              <span className={`px-4 py-1 rounded-full text-sm font-semibold ${rfp.priority === "High" ? (isLight ? 'bg-red-600 text-white' : 'bg-red-600 text-white') : (isLight ? 'bg-yellow-200 text-yellow-800' : 'bg-yellow-400 text-black')}`}>
                 Priority: {rfp.priority}
               </span>
             </div>
@@ -259,10 +264,9 @@ Provide detailed analysis without using markdown formatting symbols. Use plain t
           <motion.div 
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
-            className="mt-6 border-2 border-green-500 bg-green-500/10 rounded-xl overflow-hidden"
-          >
-            <div className="flex items-center justify-between bg-green-500/20 p-4 border-b border-green-500">
-              <div className="flex items-center gap-2 text-green-500 font-bold">
+            className={`mt-6 rounded-xl overflow-hidden border-2 ${isLight ? 'border-green-100 bg-green-50' : 'border-green-500 bg-green-500/10'}`}>
+            <div className={`flex items-center justify-between p-4 border-b ${isLight ? 'bg-green-50 border-green-100' : 'bg-green-500/20 border-green-500'}`}>
+              <div className={`flex items-center gap-2 font-bold ${isLight ? 'text-green-700' : 'text-green-500'}`}>
                 <Sparkles className="h-5 w-5" />
                 <h3>AI Strategic Summary (Groq)</h3>
               </div>
@@ -271,14 +275,14 @@ Provide detailed analysis without using markdown formatting symbols. Use plain t
                   variant="outline" 
                   size="sm" 
                   onClick={handleDownloadSummary}
-                  className="bg-green-600 hover:bg-green-700 text-white border-none h-8"
+                  className={`${isLight ? 'bg-green-700 hover:bg-green-800 text-white border-none h-8' : 'bg-green-600 hover:bg-green-700 text-white border-none h-8'}`}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download Report
                 </Button>
               )}
             </div>
-            <div className="p-6 text-sm leading-relaxed text-green-50 whitespace-pre-wrap">
+            <div className={`p-6 text-sm leading-relaxed whitespace-pre-wrap ${isLight ? 'text-slate-800' : 'text-green-50'}`}>
               {summary}
             </div>
           </motion.div>
@@ -309,34 +313,34 @@ Provide detailed analysis without using markdown formatting symbols. Use plain t
             </div>
             <div className="p-6">
               {rfpItems.error ? (
-                <div className="text-sm text-red-400">
+                <div className={`text-sm ${isLight ? 'text-red-700' : 'text-red-400'}`}>
                   {rfpItems.error}
                 </div>
               ) : rfpItems.message ? (
-                <div className="text-sm text-yellow-400">
+                <div className={`text-sm ${isLight ? 'text-yellow-700' : 'text-yellow-400'}`}>
                   {rfpItems.message}
                 </div>
               ) : (
                 <>
                   <div className="mb-4 flex items-center gap-4 text-sm">
-                    <span className="text-blue-300">Total Items: <strong>{rfpItems.total_items || 0}</strong></span>
+                    <span className={`${isLight ? 'text-slate-800' : 'text-blue-300'}`}>Total Items: <strong className={`${isLight ? 'text-slate-900' : ''}`}>{rfpItems.total_items || 0}</strong></span>
                     <span className="text-muted-foreground text-xs">Extracted by Sales Agent from RFP document</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-blue-500/30">
-                          <th className="text-left py-3 px-4 text-blue-300 font-semibold">#</th>
-                          <th className="text-left py-3 px-4 text-blue-300 font-semibold">Item Name</th>
-                          <th className="text-center py-3 px-4 text-blue-300 font-semibold">Quantity</th>
+                          <th className={`text-left py-3 px-4 font-semibold ${isLight ? 'text-slate-700' : 'text-blue-300'}`}>#</th>
+                          <th className={`text-left py-3 px-4 font-semibold ${isLight ? 'text-slate-700' : 'text-blue-300'}`}>Item Name</th>
+                          <th className={`text-center py-3 px-4 font-semibold ${isLight ? 'text-slate-700' : 'text-blue-300'}`}>Quantity</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rfpItems.items?.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-b border-blue-500/10 hover:bg-blue-500/5 transition-colors">
-                            <td className="py-3 px-4 text-blue-200 font-medium">{idx + 1}</td>
-                            <td className="py-3 px-4 text-blue-100">{item.item_name || 'N/A'}</td>
-                            <td className="py-3 px-4 text-center text-blue-100 font-medium">{item.quantity || '1'}</td>
+                          <tr key={idx} className={`border-b transition-colors ${isLight ? 'border-gray-100 hover:bg-gray-50' : 'border-blue-500/10 hover:bg-blue-500/5'}`}>
+                            <td className={`py-3 px-4 font-medium ${isLight ? 'text-slate-800' : 'text-blue-200'}`}>{idx + 1}</td>
+                            <td className={`py-3 px-4 ${isLight ? 'text-slate-800' : 'text-blue-100'}`}>{item.item_name || 'N/A'}</td>
+                            <td className={`py-3 px-4 text-center font-medium ${isLight ? 'text-slate-800' : 'text-blue-100'}`}>{item.quantity || '1'}</td>
                           </tr>
                         ))}
                       </tbody>

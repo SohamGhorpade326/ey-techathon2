@@ -19,6 +19,8 @@ import NotFound from "./pages/NotFound";
 import Masteragent from "./pages/Masteragent";
 import SkuGapAnalytics from "./pages/SkuGapAnalytics";
 import StrategicInsights from "./pages/StrategicInsights";
+import { TranslateProvider } from "./providers/TranslateProvider";
+import AppRoutes from "./AppRoutes";
 
 const queryClient = new QueryClient();
 
@@ -27,110 +29,9 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/discovery"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "sales", "technical"]}>
-                <Discovery />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rfp/:rfpId*"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "sales", "technical"]}>
-                <RFPDetails />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/analysis"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "technical", "product"]}>
-                <Analysis />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/sku-gap-analytics"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "product", "technical", "pricing"]}>
-                <SkuGapAnalytics />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/pricing"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "pricing"]}>
-                <Pricing />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/proposal"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "sales", "pricing"]}>
-                <Proposal />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/notifications"
-            element={
-              <ProtectedRoute>
-                <Notifications />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/repository"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "product"]}>
-                <Repository />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin"]}>
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route
-            path="/master-agent"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "sales", "technical", "product"]}>
-                <Masteragent />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/strategic-insights"
-            element={
-              <ProtectedRoute allowedRoles={["super_admin", "sales", "technical", "pricing", "product"]}>
-                <StrategicInsights />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <TranslateProvider>
+        <AppRoutes />
+      </TranslateProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

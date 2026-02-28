@@ -1,8 +1,10 @@
+import React from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, Clock, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
+import { useT } from "@/hooks/useT";
 
 interface UrgentRFP {
   id: string;
@@ -41,6 +43,29 @@ const mockUrgentRFPs: UrgentRFP[] = [
 ];
 
 export function UrgentAlertsPanel() {
+  const { t, registerText, lang } = useT();
+
+  // register some common strings
+  React.useEffect(() => {
+    registerText("Urgent.title", "Urgent RFPs");
+    registerText("Urgent.viewAll", "View All");
+    registerText("Urgent.insight", "Insight: 90% of wins correlate with timely action on RFPs. Delays significantly reduce win probability.");
+    registerText("Urgent.days", "days");
+    registerText("Urgent.priority.critical", "critical");
+    registerText("Urgent.priority.high", "high");
+    registerText("Urgent.priority.medium", "medium");
+  }, [registerText]);
+
+  const localizeDigits = (s: string | number | undefined) => {
+    if (s === undefined || s === null) return "";
+    const str = String(s);
+    if (lang === "hi" || lang === "mr") {
+      const map: Record<string, string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+      return str.replace(/\d/g, d => map[d] || d);
+    }
+    return str;
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -51,11 +76,11 @@ export function UrgentAlertsPanel() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-warning" />
-          <h3 className="text-lg font-semibold text-foreground">Urgent RFPs</h3>
+          <h3 className="text-lg font-semibold text-foreground">{t("Urgent.title","Urgent RFPs")}</h3>
         </div>
         <Link to="/discovery">
           <Button variant="ghost" size="sm" className="gap-1">
-            View All <ArrowRight className="h-4 w-4" />
+            {t("Urgent.viewAll","View All")} <ArrowRight className="h-4 w-4" />
           </Button>
         </Link>
       </div>
@@ -87,7 +112,7 @@ export function UrgentAlertsPanel() {
                     rfp.priority === "medium" && "bg-muted text-muted-foreground"
                   )}
                 >
-                  {rfp.priority}
+                  {t(`Urgent.priority.${rfp.priority}`, rfp.priority)}
                 </span>
               </div>
               <p className="font-medium text-foreground truncate mt-1">
@@ -105,10 +130,10 @@ export function UrgentAlertsPanel() {
                     rfp.daysRemaining <= 10 && rfp.daysRemaining > 5 && "text-warning"
                   )}
                 >
-                  {rfp.daysRemaining} days
+                  {localizeDigits(rfp.daysRemaining)} {t("Urgent.days","days")}
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground">{rfp.value}</p>
+              <p className="text-sm text-muted-foreground">{localizeDigits(rfp.value)}</p>
             </div>
           </motion.div>
         ))}
@@ -116,8 +141,12 @@ export function UrgentAlertsPanel() {
 
       <div className="mt-4 p-3 rounded-lg bg-info/10 border border-info/20">
         <p className="text-xs text-info">
-          <strong>Insight:</strong> 90% of wins correlate with timely action on RFPs.
-          Delays significantly reduce win probability.
+          {localizeDigits(
+            t(
+              "Urgent.insight",
+              "Insight: 90% of wins correlate with timely action on RFPs. Delays significantly reduce win probability."
+            )
+          )}
         </p>
       </div>
     </motion.div>

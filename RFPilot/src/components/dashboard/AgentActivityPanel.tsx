@@ -1,6 +1,8 @@
+import React from "react";
 import { motion } from "framer-motion";
 import { Search, Cpu, DollarSign, Sparkles, CheckCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useT";
 
 interface AgentActivity {
   id: string;
@@ -76,6 +78,22 @@ const mockActivities: AgentActivity[] = [
 ];
 
 export function AgentActivityPanel() {
+  const { t, registerText } = useT();
+
+  React.useEffect(() => {
+    registerText("AgentActivity.title", "Agent Activity");
+    registerText("AgentActivity.live", "Live updates");
+    registerText("AgentActivity.salesName", "Sales Agent");
+    registerText("AgentActivity.technicalName", "Technical Agent");
+    registerText("AgentActivity.pricingName", "Pricing Agent");
+    registerText("AgentActivity.masterName", "Master Agent");
+    // register mock messages
+    mockActivities.forEach((a, idx) => {
+      registerText(`AgentActivity.msg.${idx}`, a.message);
+      registerText(`AgentActivity.time.${idx}`, a.timestamp);
+    });
+  }, [registerText]);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -84,8 +102,8 @@ export function AgentActivityPanel() {
       className="card-elevated p-6 h-full"
     >
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-foreground">Agent Activity</h3>
-        <span className="text-xs text-muted-foreground">Live updates</span>
+        <h3 className="text-lg font-semibold text-foreground">{t("AgentActivity.title","Agent Activity")}</h3>
+        <span className="text-xs text-muted-foreground">{t("AgentActivity.live","Live updates")}</span>
       </div>
 
       <div className="space-y-4">
@@ -107,7 +125,7 @@ export function AgentActivityPanel() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className={cn("text-sm font-medium", config.color)}>
-                    {config.name}
+                    {t(`AgentActivity.${activity.agent}Name`, config.name)}
                   </p>
                   {activity.status === "in-progress" && (
                     <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
@@ -117,10 +135,10 @@ export function AgentActivityPanel() {
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground truncate">
-                  {activity.message}
+                  {t(`AgentActivity.msg.${index}`, activity.message)}
                 </p>
                 <p className="text-xs text-muted-foreground/60 mt-0.5">
-                  {activity.timestamp}
+                  {t(`AgentActivity.time.${index}`, activity.timestamp)}
                 </p>
               </div>
             </motion.div>

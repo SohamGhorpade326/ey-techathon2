@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Papa from "papaparse";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { useT } from "@/hooks/useT";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ const API = "http://localhost:5000/api/products";
 const TESTING_API = "http://localhost:5000/api/testing-matrix";
 
 export default function Repository() {
+  const { t, registerText, lang } = useT();
   const [products, setProducts] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [editProduct, setEditProduct] = useState<any | null>(null);
@@ -70,16 +72,57 @@ export default function Repository() {
   const loadProducts = () => {
     fetch(API, { headers: getAuthHeaders() })
       .then((res) => res.json())
-      .then(setProducts)
+      .then((data) => {
+        setProducts(data || []);
+        try {
+          (data || []).forEach((p: any) => {
+            registerText && registerText(`Repository.product.${p._id}.sku`, p.sku_code || "");
+            registerText && registerText(`Repository.product.${p._id}.name`, p.product_name || "");
+            registerText && registerText(`Repository.product.${p._id}.price`, String(p.unit_price_inr || ""));
+            // register extra fields
+            Object.keys(p).forEach((k) => {
+              if (!["_id","sku_code","product_name","unit_price_inr","__v"].includes(k)) {
+                registerText && registerText(`Repository.product.${p._id}.field.${k}`, String(p[k] || ""));
+              }
+            });
+          });
+        } catch (e) {}
+      })
       .catch(console.error);
   };
 
   const loadTestingMatrix = () => {
     fetch(TESTING_API, { headers: getAuthHeaders() })
       .then((res) => res.json())
-      .then(setTestingMatrix)
+      .then((data) => {
+        setTestingMatrix(data || []);
+        try {
+          (data || []).forEach((testItem: any) => {
+            registerText && registerText(`Repository.test.${testItem._id}.code`, testItem.test_code || "");
+            registerText && registerText(`Repository.test.${testItem._id}.name`, testItem.test_name || "");
+            registerText && registerText(`Repository.test.${testItem._id}.standard`, testItem.standard_reference || "");
+            registerText && registerText(`Repository.test.${testItem._id}.category`, testItem.test_category || "");
+            registerText && registerText(`Repository.test.${testItem._id}.price`, String(testItem.price_inr || ""));
+          });
+        } catch (e) {}
+      })
       .catch(console.error);
   };
+
+  const localizeDigits = (v: string | number | undefined | null) => {
+    if (v === undefined || v === null) return "";
+    const s = String(v);
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    const map: Record<string,string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+    return s.replace(/[0-9]/g, d => map[d] || d);
+  }
+
+  const formatCurrency = (v: number | undefined | null) => {
+    if (v === undefined || v === null) return "₹0";
+    const s = `₹${v.toLocaleString('en-IN')}`;
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    return localizeDigits(s);
+  }
 
   useEffect(() => {
     loadProducts();
@@ -293,28 +336,28 @@ export default function Repository() {
 
       <div className="flex justify-between items-center mb-4">
         <div className="flex gap-3 items-center">
-          <Input
-            placeholder="Search SKU or Product..."
-            value={searchTerm}
-            className="w-64"
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <Badge variant="outline">{products.length} Products</Badge>
-        </div>
+            <Input
+              placeholder={t ? t("Repository.searchPlaceholder","Search SKU or Product...") : "Search SKU or Product..."}
+              value={searchTerm}
+              className="w-64"
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <Badge variant="outline">{localizeDigits(products.length)} {t ? t("Repository.productsLabel","Products") : "Products"}</Badge>
+          </div>
 
         <div className="flex gap-2">
           {/* UPDATED: Export Button replaces Template button */}
           <Button variant="outline" onClick={exportCSV}>
-            <Download className="h-4 w-4 mr-2" /> Export CSV
+            <Download className="h-4 w-4 mr-2" /> {t ? t("Repository.exportCSV","Export CSV") : "Export CSV"}
           </Button>
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-4 w-4 mr-2" /> Import CSV
+            <Upload className="h-4 w-4 mr-2" /> {t ? t("Repository.importCSV","Import CSV") : "Import CSV"}
           </Button>
           <Button 
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => setShowAddDialog(true)}
           >
-            <Plus className="h-4 w-4 mr-2" /> Add Product
+            <Plus className="h-4 w-4 mr-2" /> {t ? t("Repository.addProduct","Add Product") : "Add Product"}
           </Button>
         </div>
       </div>
@@ -341,18 +384,18 @@ export default function Repository() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-blue-500">
-                  <TableHead className="text-black">SKU</TableHead>
-                  <TableHead className="text-black">Name</TableHead>
-                  <TableHead className="text-right text-black">Price</TableHead>
-                  <TableHead className="text-center text-black">Actions</TableHead>
+                  <TableHead className="text-black">{t ? t("Repository.table.col.sku","SKU") : "SKU"}</TableHead>
+                  <TableHead className="text-black">{t ? t("Repository.table.col.name","Name") : "Name"}</TableHead>
+                  <TableHead className="text-right text-black">{t ? t("Repository.table.col.price","Price") : "Price"}</TableHead>
+                  <TableHead className="text-center text-black">{t ? t("Repository.table.col.actions","Actions") : "Actions"}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredProducts.map((p) => (
                   <TableRow key={p._id}>
-                    <TableCell className="font-mono">{p.sku_code}</TableCell>
-                    <TableCell>{p.product_name}</TableCell>
-                    <TableCell className="text-right">₹{p.unit_price_inr}</TableCell>
+                    <TableCell className="font-mono">{t ? t(`Repository.product.${p._id}.sku`, p.sku_code) : p.sku_code}</TableCell>
+                    <TableCell>{t ? t(`Repository.product.${p._id}.name`, p.product_name) : p.product_name}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(p.unit_price_inr)}</TableCell>
                     <TableCell className="flex justify-center gap-2">
                       <Button size="icon" variant="ghost" onClick={() => setSelectedProduct(p)}>
                         <Eye className="h-4 w-4" />
@@ -383,42 +426,42 @@ export default function Repository() {
               className="bg-blue-600 hover:bg-blue-700 text-white"
               onClick={() => setShowAddTestDialog(true)}
             >
-              <Plus className="h-4 w-4 mr-2" /> Add Test
+              <Plus className="h-4 w-4 mr-2" /> {t ? t("Repository.addTest","Add Test") : "Add Test"}
             </Button>
           </div>
           <div className="rounded-xl border">
             <Table>
-              <TableHeader>
+                <TableHeader>
                 <TableRow className="bg-blue-500">
-                  <TableHead className="text-black">Test Code</TableHead>
-                  <TableHead className="text-black">Test Name</TableHead>
-                  <TableHead className="text-black">Standard</TableHead>
-                  <TableHead className="text-black">Category</TableHead>
-                  <TableHead className="text-right text-black">Price</TableHead>
-                  <TableHead className="text-center text-black">Actions</TableHead>
+                  <TableHead className="text-black">{t ? t("Repository.table.col.testCode","Test Code") : "Test Code"}</TableHead>
+                  <TableHead className="text-black">{t ? t("Repository.table.col.testName","Test Name") : "Test Name"}</TableHead>
+                  <TableHead className="text-black">{t ? t("Repository.table.col.standard","Standard") : "Standard"}</TableHead>
+                  <TableHead className="text-black">{t ? t("Repository.table.col.category","Category") : "Category"}</TableHead>
+                  <TableHead className="text-right text-black">{t ? t("Repository.table.col.price","Price") : "Price"}</TableHead>
+                  <TableHead className="text-center text-black">{t ? t("Repository.table.col.actions","Actions") : "Actions"}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {testingMatrix.map((t) => (
-                  <TableRow key={t._id}>
-                    <TableCell className="font-mono">{t.test_code}</TableCell>
-                    <TableCell>{t.test_name}</TableCell>
-                    <TableCell>{t.standard_reference}</TableCell>
-                    <TableCell>{t.test_category}</TableCell>
-                    <TableCell className="text-right">₹{t.price_inr}</TableCell>
+                {testingMatrix.map((testItem) => (
+                  <TableRow key={testItem._id}>
+                    <TableCell className="font-mono">{t ? t(`Repository.test.${testItem._id}.code`, testItem.test_code) : testItem.test_code}</TableCell>
+                    <TableCell>{t ? t(`Repository.test.${testItem._id}.name`, testItem.test_name) : testItem.test_name}</TableCell>
+                    <TableCell>{t ? t(`Repository.test.${testItem._id}.standard`, testItem.standard_reference) : testItem.standard_reference}</TableCell>
+                    <TableCell>{t ? t(`Repository.test.${testItem._id}.category`, testItem.test_category) : testItem.test_category}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(testItem.price_inr)}</TableCell>
                     <TableCell className="flex justify-center gap-2">
                       <Button size="icon" variant="ghost" onClick={() => {
-                        setEditTest(t);
-                        setTestCode(t.test_code);
-                        setTestName(t.test_name);
-                        setStandardRef(t.standard_reference);
-                        setTestCategory(t.test_category);
-                        setTestPrice(String(t.price_inr));
-                        setPriceBasis(t.price_basis || "");
+                        setEditTest(testItem);
+                        setTestCode(testItem.test_code);
+                        setTestName(testItem.test_name);
+                        setStandardRef(testItem.standard_reference);
+                        setTestCategory(testItem.test_category);
+                        setTestPrice(String(testItem.price_inr));
+                        setPriceBasis(testItem.price_basis || "");
                       }}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteTest(t._id)}>
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteTest(testItem._id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -432,18 +475,18 @@ export default function Repository() {
 
       {/* VIEW MODAL */}
       <Dialog open={!!selectedProduct} onOpenChange={() => setSelectedProduct(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Product Details</DialogTitle></DialogHeader>
+          <DialogContent>
+          <DialogHeader><DialogTitle>{t ? t("Repository.view.title","Product Details") : "Product Details"}</DialogTitle></DialogHeader>
           {selectedProduct && (
             <div className="space-y-2">
-              <p><b>SKU:</b> {selectedProduct.sku_code}</p>
-              <p><b>Name:</b> {selectedProduct.product_name}</p>
-              <p><b>Price:</b> ₹{selectedProduct.unit_price_inr}</p>
+              <p><b>{t ? t("Repository.view.sku","SKU:") : "SKU:"}</b> {t ? t(`Repository.product.${selectedProduct._id}.sku`, selectedProduct.sku_code) : selectedProduct.sku_code}</p>
+              <p><b>{t ? t("Repository.view.name","Name:") : "Name:"}</b> {t ? t(`Repository.product.${selectedProduct._id}.name`, selectedProduct.product_name) : selectedProduct.product_name}</p>
+              <p><b>{t ? t("Repository.view.price","Price:") : "Price:"}</b> {formatCurrency(selectedProduct.unit_price_inr)}</p>
               <hr />
               {getExtraFields(selectedProduct).map(([k, v]) => (
                 <div key={k} className="flex justify-between text-sm">
                   <span className="capitalize">{k.replace(/_/g, " ")}</span>
-                  <span>{String(v)}</span>
+                  <span>{t ? t(`Repository.product.${selectedProduct._id}.field.${k}`, String(v)) : String(v)}</span>
                 </div>
               ))}
             </div>

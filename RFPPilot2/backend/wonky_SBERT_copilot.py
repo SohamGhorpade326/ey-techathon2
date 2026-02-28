@@ -420,9 +420,19 @@ def format_sales_for_frontend(raw: dict, index: int) -> dict:
         defaults = generate_realistic_defaults(domain, rfp_title)
         scope_items_value = defaults["scope_items"]
 
+    # Ensure rfp_id is never blank or the placeholder 'Not Found'. Generate AUTO id when needed.
+    rfp_id = raw.get("rfp_id")
+    if not rfp_id or str(rfp_id).strip() == "" or str(rfp_id).strip().lower() == "not found":
+        import uuid
+        rfp_id = f"AUTO-{uuid.uuid4().hex[:8].upper()}"
+
+    # Strip to avoid accidental leading/trailing whitespace
+    if isinstance(rfp_id, str):
+        rfp_id = rfp_id.strip()
+
     return {
         # 🔑 keep ID stable
-        "rfp_id": raw.get("rfp_id", f"#102{index + 3}"),
+        "rfp_id": rfp_id,
 
         # 🔑 MUST MATCH frontend & master agent
         "rfp_title": rfp_title if rfp_title else "Untitled RFP",
@@ -550,7 +560,6 @@ def extract_fields_single_call(text: str) -> dict:
     
     # Provide defaults for missing fields
     defaults = {
-        "rfp_id": "Not Found",
         "rfp_title": "Not Found", 
         "buyer": "Not Found",
         "submission_deadline": "Not Found",
@@ -562,6 +571,13 @@ def extract_fields_single_call(text: str) -> dict:
         if key not in extracted or not extracted[key]:
             extracted[key] = default
             
+    # Ensure we never return a placeholder "Not Found" as the rfp_id.
+    # If the LLM didn't extract a usable ID, generate a deterministic-looking AUTO id.
+    import uuid
+    rfp_id_val = extracted.get("rfp_id")
+    if not rfp_id_val or str(rfp_id_val).strip() == "" or str(rfp_id_val).strip().lower() == "not found":
+        extracted["rfp_id"] = f"AUTO-{uuid.uuid4().hex[:8].upper()}"
+
     return extracted
 
 # Helper function for Gmail RFPs
@@ -666,7 +682,9 @@ def sales_agent_node(state: RFPState) -> RFPState:
         formatted["gmail_rfp_text"] = gmail_rfp_text
         formatted["source"] = "gmail"
         
-        # Save and return
+        # Save and return (clean id)
+        if isinstance(formatted.get("rfp_id"), str):
+            formatted["rfp_id"] = formatted["rfp_id"].strip()
         save_rfp(formatted)
         results.append(formatted)
         
@@ -1047,9 +1065,12 @@ JSON:"""
                 try:
                     formatted = future.result()
                     if formatted:
+                        # strip rfp_id to avoid accidental whitespace and duplicates
+                        if isinstance(formatted.get("rfp_id"), str):
+                            formatted["rfp_id"] = formatted["rfp_id"].strip()
                         save_rfp(formatted)
                         results.append(formatted)
-                        
+
                         print(f"\n[Sales Agent] ✅ Processed PDF {pdf_index + 1}:")
                         print(json.dumps({
                             "rfp_id": formatted.get("rfp_id"),

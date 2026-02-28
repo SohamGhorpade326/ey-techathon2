@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { MainLayout } from "@/components/layout/MainLayout";
 import {
   TrendingUp,
   AlertTriangle,
@@ -18,9 +19,6 @@ import {
   Bar,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -28,6 +26,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { PieChart } from "@mui/x-charts/PieChart";
+import { useT } from "@/hooks/useT";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -94,6 +94,7 @@ interface Insights {
 }
 
 export default function SkuGapAnalytics() {
+  const { t, registerText, lang } = useT();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -190,6 +191,62 @@ export default function SkuGapAnalytics() {
       if (anyFailed) {
         setLoadError("Some analytics widgets failed to load. Refresh to retry.");
       }
+      try {
+        // Register static UI strings for translation
+        registerText && registerText("SkuGap.title","SKU Gap Intelligence");
+        registerText && registerText("SkuGap.subtitle","Comprehensive analysis of product specification coverage");
+        registerText && registerText("SkuGap.refresh","Refresh Data");
+
+        registerText && registerText("SkuGap.kpi.totalItems","Total SKU Items");
+        registerText && registerText("SkuGap.kpi.avgMatch","Avg Match Percentage");
+        registerText && registerText("SkuGap.kpi.totalMissing","Total Missing Specs");
+        registerText && registerText("SkuGap.kpi.estimatedRisk","Estimated Risk Value");
+
+        registerText && registerText("SkuGap.domain.title","Domain Gap Analysis");
+        registerText && registerText("SkuGap.domain.desc","Missing specifications by product domain");
+
+        registerText && registerText("SkuGap.match.title","Match Distribution");
+        registerText && registerText("SkuGap.match.desc","SKU coverage quality breakdown");
+
+        registerText && registerText("SkuGap.spec.title","Most Missing Specifications");
+        registerText && registerText("SkuGap.spec.desc","Top 10 frequently missing specs");
+
+        registerText && registerText("SkuGap.timeline.title","Coverage Timeline");
+        registerText && registerText("SkuGap.timeline.desc","Average match percentage over time");
+
+        registerText && registerText("SkuGap.insights.title","AI-Powered Insights");
+        registerText && registerText("SkuGap.insights.desc","Strategic recommendations from advanced analysis");
+
+        registerText && registerText("SkuGap.reco.title","Top Recommendations");
+        registerText && registerText("SkuGap.reco.desc","Priority actions based on gap analysis");
+
+        registerText && registerText("SkuGap.table.col.spec","Specification");
+        registerText && registerText("SkuGap.table.col.freq","Frequency");
+        registerText && registerText("SkuGap.table.col.impact","Impact Level");
+        registerText && registerText("SkuGap.table.col.suggestion","Suggestion");
+
+        registerText && registerText("SkuGap.footer.full","Full Coverage");
+        registerText && registerText("SkuGap.footer.partial","Partial Coverage");
+        registerText && registerText("SkuGap.footer.incomplete","Incomplete Coverage");
+
+        // Register dynamic/response texts
+        registerText && registerText("SkuGap.insights.text", insights?.insights_text || "");
+        (recommendations || []).forEach((r, idx) => {
+          registerText && registerText(`SkuGap.reco.item.${idx}.spec_name`, r.spec_name || "");
+          registerText && registerText(`SkuGap.reco.item.${idx}.suggestion`, r.suggestion || "");
+          registerText && registerText(`SkuGap.reco.item.${idx}.impact`, r.impact_level || "");
+        });
+        // Impact labels
+        registerText && registerText("SkuGap.impact.High","High");
+        registerText && registerText("SkuGap.impact.Medium","Medium");
+        registerText && registerText("SkuGap.impact.Low","Low");
+        // Pie labels
+        registerText && registerText("SkuGap.match.highLabel","High (≥80%)");
+        registerText && registerText("SkuGap.match.mediumLabel","Medium (60-79%)");
+        registerText && registerText("SkuGap.match.lowLabel","Low (<60%)");
+      } catch (e) {
+        // ignore registration errors
+      }
     } catch (error) {
       console.error("Error fetching SKU gap data:", error);
       setLoadError("Unable to load SKU Gap Intelligence right now.");
@@ -199,12 +256,30 @@ export default function SkuGapAnalytics() {
   };
 
   const formatCurrency = (value: number) => {
-    return `₹${value.toLocaleString("en-IN")}`;
+    const s = `₹${value.toLocaleString("en-IN")}`;
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    return localizeDigitsInText(s);
   };
 
   const formatPercent = (value: number) => {
-    return `${value.toFixed(2)}%`;
+    const s = `${value.toFixed(2)}%`;
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    return localizeDigitsInText(s);
   };
+
+  const localizeDigits = (v: string | number | undefined | null) => {
+    if (v === undefined || v === null) return "";
+    const s = String(v);
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    const map: Record<string,string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+    return s.replace(/[0-9]/g, d => map[d] || d);
+  }
+
+  const localizeDigitsInText = (text: string) => {
+    if (!text) return text;
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return text;
+    return text.replace(/[0-9]/g, d => ({ '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' }[d] || d));
+  }
 
   if (loading) {
     return (
@@ -215,18 +290,18 @@ export default function SkuGapAnalytics() {
           className="text-center"
         >
           <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading SKU Gap Intelligence...</p>
+          <p className="text-muted-foreground">{t ? t("SkuGap.loading","Loading SKU Gap Intelligence...") : "Loading SKU Gap Intelligence..."}</p>
         </motion.div>
       </div>
     );
   }
 
-  const pieColors = ["#10b981", "#f59e0b", "#ef4444"];
+  const pieColors = ["#10b981", "#f59e0b", "#ef4444"]; // High, Medium, Low
   const pieData = matchDistribution
     ? [
-        { name: "High (≥80%)", value: matchDistribution.high, color: pieColors[0] },
-        { name: "Medium (60-79%)", value: matchDistribution.medium, color: pieColors[1] },
-        { name: "Low (<60%)", value: matchDistribution.low, color: pieColors[2] },
+        { name: t ? t("SkuGap.match.highLabel","High (≥80%)") : "High (≥80%)", value: matchDistribution.high, color: pieColors[0] },
+        { name: t ? t("SkuGap.match.mediumLabel","Medium (60-79%)") : "Medium (60-79%)", value: matchDistribution.medium, color: pieColors[1] },
+        { name: t ? t("SkuGap.match.lowLabel","Low (<60%)") : "Low (<60%)", value: matchDistribution.low, color: pieColors[2] },
       ]
     : [];
 
@@ -244,10 +319,11 @@ export default function SkuGapAnalytics() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-6 space-y-6">
+    <MainLayout title={t ? t("SkuGap.title","SKU Gap Intelligence") : "sku gap intelligence"}>
+      <div className="min-h-screen bg-background p-6 space-y-6">
       {loadError && (
         <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-          {loadError}
+          {t ? t("SkuGap.loadError","Some analytics widgets failed to load. Refresh to retry.") : loadError}
         </div>
       )}
       {/* Header */}
@@ -268,10 +344,10 @@ export default function SkuGapAnalytics() {
           <div>
             <h1 className="text-4xl font-bold text-foreground flex items-center gap-3">
               <Package className="h-10 w-10 text-primary" />
-              SKU Gap Intelligence
+              {t ? t("SkuGap.title","SKU Gap Intelligence") : "SKU Gap Intelligence"}
             </h1>
             <p className="text-muted-foreground mt-1">
-              Comprehensive analysis of product specification coverage
+              {t ? t("SkuGap.subtitle","Comprehensive analysis of product specification coverage") : "Comprehensive analysis of product specification coverage"}
             </p>
           </div>
         </div>
@@ -281,7 +357,7 @@ export default function SkuGapAnalytics() {
           onClick={fetchAllData}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors"
         >
-          Refresh Data
+          {t ? t("SkuGap.refresh","Refresh Data") : "Refresh Data"}
         </motion.button>
       </motion.div>
 
@@ -294,15 +370,15 @@ export default function SkuGapAnalytics() {
       >
         <motion.div variants={item}>
           <KPICard
-            title="Total SKU Items"
-            value={summary?.total_items.toString() || "0"}
+            title={t ? t("SkuGap.kpi.totalItems","Total SKU Items") : "Total SKU Items"}
+            value={localizeDigits(summary?.total_items?.toString() || "0")}
             icon={Package}
             gradient="from-blue-500 to-blue-700"
           />
         </motion.div>
         <motion.div variants={item}>
           <KPICard
-            title="Avg Match Percentage"
+            title={t ? t("SkuGap.kpi.avgMatch","Avg Match Percentage") : "Avg Match Percentage"}
             value={formatPercent(summary?.avg_match_percent || 0)}
             icon={TrendingUp}
             gradient="from-green-500 to-green-700"
@@ -310,15 +386,15 @@ export default function SkuGapAnalytics() {
         </motion.div>
         <motion.div variants={item}>
           <KPICard
-            title="Total Missing Specs"
-            value={summary?.total_missing_specs.toString() || "0"}
+            title={t ? t("SkuGap.kpi.totalMissing","Total Missing Specs") : "Total Missing Specs"}
+            value={localizeDigits(summary?.total_missing_specs?.toString() || "0")}
             icon={AlertTriangle}
             gradient="from-orange-500 to-orange-700"
           />
         </motion.div>
         <motion.div variants={item}>
           <KPICard
-            title="Estimated Risk Value"
+            title={t ? t("SkuGap.kpi.estimatedRisk","Estimated Risk Value") : "Estimated Risk Value"}
             value={formatCurrency(riskValue?.estimated_risk_score || 0)}
             icon={DollarSign}
             gradient="from-red-500 to-red-700"
@@ -336,8 +412,8 @@ export default function SkuGapAnalytics() {
         <motion.div variants={item}>
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Domain Gap Analysis</CardTitle>
-              <CardDescription>Missing specifications by product domain</CardDescription>
+              <CardTitle className="text-foreground">{t ? t("SkuGap.domain.title","Domain Gap Analysis") : "Domain Gap Analysis"}</CardTitle>
+                <CardDescription>{t ? t("SkuGap.domain.desc","Missing specifications by product domain") : "Missing specifications by product domain"}</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -346,6 +422,9 @@ export default function SkuGapAnalytics() {
                   <XAxis dataKey="domain" stroke="hsl(var(--muted-foreground))" />
                   <YAxis stroke="hsl(var(--muted-foreground))" />
                   <Tooltip
+                    cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.25 }}
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    itemStyle={{ color: "hsl(var(--foreground))" }}
                     contentStyle={{
                       backgroundColor: "hsl(var(--card))",
                       border: "1px solid hsl(var(--border))",
@@ -362,35 +441,43 @@ export default function SkuGapAnalytics() {
         <motion.div variants={item}>
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Match Distribution</CardTitle>
-              <CardDescription>SKU coverage quality breakdown</CardDescription>
+              <CardTitle className="text-foreground">{t ? t("SkuGap.match.title","Match Distribution") : "Match Distribution"}</CardTitle>
+              <CardDescription>{t ? t("SkuGap.match.desc","SKU coverage quality breakdown") : "SKU coverage quality breakdown"}</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
+                <div className="h-[300px] w-full">
+                  <PieChart
+                    series={[
+                      {
+                        data: pieData.map((entry, index) => ({
+                          id: index,
+                          value: entry.value,
+                          label: entry.name,
+                          color: entry.color,
+                        })),
+                        innerRadius: 34,
+                        outerRadius: 110,
+                        paddingAngle: 2,
+                        cornerRadius: 4,
+                        highlightScope: { fade: "global", highlight: "item" },
+                        faded: {
+                          innerRadius: 36,
+                          additionalRadius: -16,
+                          color: "hsl(var(--muted))",
+                        },
+                      },
+                    ]}
+                    height={300}
+                    slotProps={{ legend: { sx: { display: "none" } } }}
+                    sx={{
+                      ".MuiChartsTooltip-paper": {
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                      },
                     }}
                   />
-                </PieChart>
-              </ResponsiveContainer>
+                </div>
             </CardContent>
           </Card>
         </motion.div>
@@ -406,8 +493,8 @@ export default function SkuGapAnalytics() {
         <motion.div variants={item}>
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Most Missing Specifications</CardTitle>
-              <CardDescription>Top 10 frequently missing specs</CardDescription>
+              <CardTitle className="text-foreground">{t ? t("SkuGap.spec.title","Most Missing Specifications") : "Most Missing Specifications"}</CardTitle>
+              <CardDescription>{t ? t("SkuGap.spec.desc","Top 10 frequently missing specs") : "Top 10 frequently missing specs"}</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -416,6 +503,9 @@ export default function SkuGapAnalytics() {
                   <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
                   <YAxis dataKey="spec_name" type="category" width={150} stroke="hsl(var(--muted-foreground))" />
                   <Tooltip
+                    cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.25 }}
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    itemStyle={{ color: "hsl(var(--foreground))" }}
                     contentStyle={{
                       backgroundColor: "hsl(var(--card))",
                       border: "1px solid hsl(var(--border))",
@@ -432,8 +522,8 @@ export default function SkuGapAnalytics() {
         <motion.div variants={item}>
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Coverage Timeline</CardTitle>
-              <CardDescription>Average match percentage over time</CardDescription>
+              <CardTitle className="text-foreground">{t ? t("SkuGap.timeline.title","Coverage Timeline") : "Coverage Timeline"}</CardTitle>
+              <CardDescription>{t ? t("SkuGap.timeline.desc","Average match percentage over time") : "Average match percentage over time"}</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -442,6 +532,9 @@ export default function SkuGapAnalytics() {
                   <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" />
                   <YAxis stroke="hsl(var(--muted-foreground))" />
                   <Tooltip
+                    cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.25 }}
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    itemStyle={{ color: "hsl(var(--foreground))" }}
                     contentStyle={{
                       backgroundColor: "hsl(var(--card))",
                       border: "1px solid hsl(var(--border))",
@@ -467,14 +560,14 @@ export default function SkuGapAnalytics() {
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-purple-400" />
-                AI-Powered Insights
+                {t ? t("SkuGap.insights.title","AI-Powered Insights") : "AI-Powered Insights"}
               </CardTitle>
-              <CardDescription>Strategic recommendations from advanced analysis</CardDescription>
+              <CardDescription>{t ? t("SkuGap.insights.desc","Strategic recommendations from advanced analysis") : "Strategic recommendations from advanced analysis"}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="prose prose-invert max-w-none">
                 <pre className="whitespace-pre-wrap text-sm text-foreground/90 font-sans leading-relaxed">
-                  {insights.insights_text.replace(/\*\*/g, '')}
+                  {t ? t("SkuGap.insights.text", insights?.insights_text || "").replace(/\*\*/g, '') : (insights?.insights_text || "").replace(/\*\*/g, '')}
                 </pre>
               </div>
             </CardContent>
@@ -490,17 +583,17 @@ export default function SkuGapAnalytics() {
       >
         <Card className="bg-card border-border">
           <CardHeader>
-            <CardTitle className="text-foreground">Top Recommendations</CardTitle>
-            <CardDescription>Priority actions based on gap analysis</CardDescription>
+            <CardTitle className="text-foreground">{t ? t("SkuGap.reco.title","Top Recommendations") : "Top Recommendations"}</CardTitle>
+            <CardDescription>{t ? t("SkuGap.reco.desc","Priority actions based on gap analysis") : "Priority actions based on gap analysis"}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Specification</TableHead>
-                  <TableHead>Frequency</TableHead>
-                  <TableHead>Impact Level</TableHead>
-                  <TableHead>Suggestion</TableHead>
+                  <TableHead>{t ? t("SkuGap.table.col.spec","Specification") : "Specification"}</TableHead>
+                  <TableHead>{t ? t("SkuGap.table.col.freq","Frequency") : "Frequency"}</TableHead>
+                  <TableHead>{t ? t("SkuGap.table.col.impact","Impact Level") : "Impact Level"}</TableHead>
+                  <TableHead>{t ? t("SkuGap.table.col.suggestion","Suggestion") : "Suggestion"}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -512,14 +605,14 @@ export default function SkuGapAnalytics() {
                     transition={{ delay: index * 0.1 }}
                     className="border-b border-border"
                   >
-                    <TableCell className="font-medium">{rec.spec_name}</TableCell>
+                    <TableCell className="font-medium">{t ? t(`SkuGap.reco.item.${index}.spec_name`, rec.spec_name) : rec.spec_name}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{rec.frequency}</Badge>
+                      <Badge variant="secondary">{localizeDigits(rec.frequency)}</Badge>
                     </TableCell>
                     <TableCell>
-                      <ImpactBadge level={rec.impact_level} />
+                      <ImpactBadge level={t ? t(`SkuGap.impact.${rec.impact_level}`, rec.impact_level) : rec.impact_level} />
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{rec.suggestion}</TableCell>
+                    <TableCell className="text-muted-foreground">{t ? t(`SkuGap.reco.item.${index}.suggestion`, rec.suggestion) : rec.suggestion}</TableCell>
                   </motion.tr>
                 ))}
               </TableBody>
@@ -536,25 +629,26 @@ export default function SkuGapAnalytics() {
         className="grid grid-cols-1 md:grid-cols-3 gap-4"
       >
         <StatCard
-          label="Full Coverage"
+          label={t ? t("SkuGap.footer.full","Full Coverage") : "Full Coverage"}
           value={summary?.full_count || 0}
           icon={CheckCircle2}
           color="text-green-500"
         />
         <StatCard
-          label="Partial Coverage"
+          label={t ? t("SkuGap.footer.partial","Partial Coverage") : "Partial Coverage"}
           value={summary?.partial_count || 0}
           icon={AlertCircle}
           color="text-yellow-500"
         />
         <StatCard
-          label="Incomplete Coverage"
+          label={t ? t("SkuGap.footer.incomplete","Incomplete Coverage") : "Incomplete Coverage"}
           value={summary?.incomplete_count || 0}
           icon={XCircle}
           color="text-red-500"
         />
       </motion.div>
-    </div>
+      </div>
+    </MainLayout>
   );
 }
 
@@ -584,6 +678,7 @@ function KPICard({
 }
 
 function ImpactBadge({ level }: { level: string }) {
+  const { t } = useT();
   const variants: Record<string, { className: string; icon: any }> = {
     High: { className: "bg-red-500/20 text-red-400 border-red-500/50", icon: AlertTriangle },
     Medium: { className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/50", icon: AlertCircle },
@@ -596,7 +691,7 @@ function ImpactBadge({ level }: { level: string }) {
   return (
     <Badge className={`${variant.className} border`}>
       <Icon className="h-3 w-3 mr-1" />
-      {level}
+      {t ? t(`SkuGap.impact.${level}`, level) : level}
     </Badge>
   );
 }
@@ -612,6 +707,14 @@ function StatCard({
   icon: any;
   color: string;
 }) {
+  const { lang } = useT();
+  const localizeDigits = (v: string | number | undefined | null) => {
+    if (v === undefined || v === null) return "";
+    const s = String(v);
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    const map: Record<string,string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+    return s.replace(/[0-9]/g, d => map[d] || d);
+  }
   return (
     <Card className="bg-card border-border">
       <CardContent className="p-4 flex items-center gap-4">
@@ -619,7 +722,7 @@ function StatCard({
           <Icon className="h-6 w-6" />
         </div>
         <div>
-          <p className="text-2xl font-bold text-foreground">{value}</p>
+          <p className="text-2xl font-bold text-foreground">{localizeDigits(value)}</p>
           <p className="text-sm text-muted-foreground">{label}</p>
         </div>
       </CardContent>

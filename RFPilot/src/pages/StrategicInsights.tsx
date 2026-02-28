@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useT } from "@/hooks/useT";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { PieChart } from "@mui/x-charts/PieChart";
 import { TrendingUp, Database, PlusCircle, Info, Target, Award } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -54,6 +56,8 @@ interface WinProbability {
 }
 
 export default function StrategicInsights() {
+  const { t, registerText, lang } = useT();
+  const title = t("StrategicInsights.title", "Strategic Insights");
   const [pastBids, setPastBids] = useState<PastBid[]>([]);
   const [winProbability, setWinProbability] = useState<WinProbability | null>(null);
   const [loading, setLoading] = useState(false);
@@ -82,6 +86,17 @@ export default function StrategicInsights() {
       if (response.ok) {
         const data = await response.json();
         setPastBids(data.data || []);
+        try {
+          // register per-bid dynamic strings for translation
+          (data.data || []).forEach((b: PastBid) => {
+            registerText && registerText(`StrategicInsights.pastbid.${b.bid_id}.buyer`, b.buyer || "");
+            registerText && registerText(`StrategicInsights.pastbid.${b.bid_id}.domain`, b.domain || "");
+            registerText && registerText(`StrategicInsights.pastbid.${b.bid_id}.buyer_type`, b.buyer_type || "");
+            registerText && registerText(`StrategicInsights.pastbid.${b.bid_id}.pricing_strategy`, b.pricing_strategy || "");
+          });
+        } catch (e) {
+          // ignore
+        }
       } else {
         console.error("Failed to fetch past bids");
       }
@@ -162,6 +177,76 @@ export default function StrategicInsights() {
     fetchWinProbability();
   }, []);
 
+  useEffect(() => {
+    try {
+      registerText && registerText("StrategicInsights.title","Strategic Insights");
+      registerText && registerText("StrategicInsights.win.title","Win Probability Predictor");
+      registerText && registerText("StrategicInsights.win.desc","AI-powered prediction based on current RFP and historical performance");
+      registerText && registerText("StrategicInsights.win.refresh","Refresh Analysis");
+
+      registerText && registerText("StrategicInsights.breakdown.title","Score Breakdown");
+      registerText && registerText("StrategicInsights.breakdown.buyer","Buyer Match");
+      registerText && registerText("StrategicInsights.breakdown.domain","Domain Expertise");
+      registerText && registerText("StrategicInsights.breakdown.value","Value Alignment");
+      registerText && registerText("StrategicInsights.breakdown.risk","Risk Penalty");
+      registerText && registerText("StrategicInsights.strategy","Strategy:");
+
+      registerText && registerText("StrategicInsights.currentRFP.title","Current RFP:");
+      registerText && registerText("StrategicInsights.currentRFP.domain","Domain:");
+      registerText && registerText("StrategicInsights.currentRFP.value","Value:");
+      registerText && registerText("StrategicInsights.historical.title","Historical Performance:");
+
+      registerText && registerText("StrategicInsights.chart.bidValue","Bid Value by Status");
+      registerText && registerText("StrategicInsights.chart.winRate","Win Rate by Domain");
+
+      registerText && registerText("StrategicInsights.table.title","Historical Bid Explorer");
+      registerText && registerText("StrategicInsights.table.desc","Browse all past bids with outcomes and insights");
+      registerText && registerText("StrategicInsights.table.col.bidId","Bid ID");
+      registerText && registerText("StrategicInsights.table.col.buyer","Buyer");
+      registerText && registerText("StrategicInsights.table.col.type","Type");
+      registerText && registerText("StrategicInsights.table.col.domain","Domain");
+      registerText && registerText("StrategicInsights.table.col.value","Value (Cr)");
+      registerText && registerText("StrategicInsights.table.col.status","Status");
+      registerText && registerText("StrategicInsights.table.col.days","Days");
+      registerText && registerText("StrategicInsights.table.noData","No past bids found");
+
+      registerText && registerText("StrategicInsights.form.title","Add Won Bid");
+      registerText && registerText("StrategicInsights.form.desc","Capture successful bids to improve predictions");
+      registerText && registerText("StrategicInsights.form.bidId","Bid ID *");
+      registerText && registerText("StrategicInsights.form.buyer","Buyer *");
+      registerText && registerText("StrategicInsights.form.buyerType","Buyer Type *");
+      registerText && registerText("StrategicInsights.form.domain","Domain *");
+      registerText && registerText("StrategicInsights.form.value","Value (Cr) *");
+      registerText && registerText("StrategicInsights.form.status","Status *");
+      registerText && registerText("StrategicInsights.form.addBtn","Add Bid");
+
+      // dynamic texts
+      registerText && registerText("StrategicInsights.win.strategy", winProbability?.strategy_recommendation || "");
+    } catch (e) {
+      // ignore
+    }
+  }, [winProbability, pastBids]);
+
+  const localizeDigits = (v: string | number | undefined | null) => {
+    if (v === undefined || v === null) return "";
+    const s = String(v);
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    const map: Record<string,string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+    return s.replace(/[0-9]/g, d => map[d] || d);
+  }
+
+  const formatPercent = (v: number) => {
+    const s = `${v.toFixed(1)}%`;
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    return localizeDigits(s);
+  }
+
+  const formatCurrency = (v: number) => {
+    const s = `₹${v.toLocaleString('en-IN')}`;
+    if (!lang || (lang !== 'hi' && lang !== 'mr')) return s;
+    return localizeDigits(s);
+  }
+
   // Prepare chart data
   const getBidValueByStatus = () => {
     const wonTotal = pastBids
@@ -199,6 +284,28 @@ export default function StrategicInsights() {
     Won: "#10b981",
     Lost: "#ef4444",
   };
+
+  const mutedPieColors = [
+    "#4F5DFF",
+    "#F4C35A",
+    "#F35D6B",
+    "#35BDF2",
+    "#4ECB92",
+    "#9B8CFF",
+  ];
+
+  const winRatePieData = useMemo(() => {
+    // derive pie data from backend-provided `pastBids` via getWinRateByDomain()
+    // Use percentage value so the chart shows per-domain win-rate clearly
+    return getWinRateByDomain().map((entry, index) => ({
+      id: index,
+      value: Number(entry.winRate), // percentage (0-100)
+      label: `${entry.domain} (${entry.won}/${entry.won + entry.lost}) ${entry.winRate}%`,
+      color: mutedPieColors[index % mutedPieColors.length],
+      won: entry.won,
+      total: entry.won + entry.lost,
+    }));
+  }, [pastBids]);
 
   // Circular gauge for win probability
   const WinProbabilityGauge = ({ score }: { score: number }) => {
@@ -249,7 +356,7 @@ export default function StrategicInsights() {
   };
 
   return (
-    <MainLayout title="Strategic Insights">
+     <MainLayout title={title}>
       <div className="space-y-6">
         {/* Win Predictor Section */}
         <motion.div
@@ -261,10 +368,10 @@ export default function StrategicInsights() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-primary" />
-                <CardTitle>Win Probability Predictor</CardTitle>
+                <CardTitle>{t ? t("StrategicInsights.win.title","Win Probability Predictor") : "Win Probability Predictor"}</CardTitle>
               </div>
               <CardDescription>
-                AI-powered prediction based on current RFP and historical performance
+                {t ? t("StrategicInsights.win.desc","AI-powered prediction based on current RFP and historical performance") : "AI-powered prediction based on current RFP and historical performance"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -273,7 +380,7 @@ export default function StrategicInsights() {
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
                 </div>
               ) : winProbability?.success ? (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
                   {/* Gauge */}
                   <div className="flex flex-col items-center justify-center">
                     <WinProbabilityGauge score={winProbability.win_score} />
@@ -283,7 +390,7 @@ export default function StrategicInsights() {
                       className="mt-4"
                       onClick={fetchWinProbability}
                     >
-                      Refresh Analysis
+                      {t ? t("StrategicInsights.win.refresh","Refresh Analysis") : "Refresh Analysis"}
                     </Button>
                   </div>
 
@@ -304,23 +411,23 @@ export default function StrategicInsights() {
                     )}
                     
                     <div>
-                      <h4 className="font-semibold mb-2">Score Breakdown</h4>
+                      <h4 className="font-semibold mb-2">{t ? t("StrategicInsights.breakdown.title","Score Breakdown") : "Score Breakdown"}</h4>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm">Buyer Match</span>
-                          <Badge variant="secondary">+{winProbability.breakdown.buyer_match.toFixed(1)}%</Badge>
+                          <span className="text-sm">{t ? t("StrategicInsights.breakdown.buyer","Buyer Match") : "Buyer Match"}</span>
+                          <Badge variant="secondary">+{formatPercent(winProbability.breakdown.buyer_match)}</Badge>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-sm">Domain Expertise</span>
-                          <Badge variant="secondary">+{winProbability.breakdown.domain_expertise.toFixed(1)}%</Badge>
+                          <span className="text-sm">{t ? t("StrategicInsights.breakdown.domain","Domain Expertise") : "Domain Expertise"}</span>
+                          <Badge variant="secondary">+{formatPercent(winProbability.breakdown.domain_expertise)}</Badge>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-sm">Value Alignment</span>
-                          <Badge variant="secondary">+{winProbability.breakdown.value_alignment.toFixed(1)}%</Badge>
+                          <span className="text-sm">{t ? t("StrategicInsights.breakdown.value","Value Alignment") : "Value Alignment"}</span>
+                          <Badge variant="secondary">+{formatPercent(winProbability.breakdown.value_alignment)}</Badge>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-sm">Risk Penalty</span>
-                          <Badge variant="destructive">-{winProbability.breakdown.risk_penalty.toFixed(1)}%</Badge>
+                          <span className="text-sm">{t ? t("StrategicInsights.breakdown.risk","Risk Penalty") : "Risk Penalty"}</span>
+                          <Badge variant="destructive">-{formatPercent(winProbability.breakdown.risk_penalty)}</Badge>
                         </div>
                       </div>
                     </div>
@@ -328,21 +435,21 @@ export default function StrategicInsights() {
                     <Alert>
                       <Award className="h-4 w-4" />
                       <AlertDescription>
-                        <strong>Strategy:</strong> {winProbability.strategy_recommendation}
+                        <strong>{t ? t("StrategicInsights.strategy","Strategy:") : "Strategy:"}</strong> {t ? t("StrategicInsights.win.strategy", winProbability.strategy_recommendation) : winProbability.strategy_recommendation}
                       </AlertDescription>
                     </Alert>
 
                     {winProbability.current_rfp && (
                       <div className="text-sm text-muted-foreground space-y-1">
-                        <p><strong>Current RFP:</strong> {winProbability.current_rfp.buyer} ({winProbability.current_rfp.buyer_type})</p>
-                        <p><strong>Domain:</strong> {winProbability.current_rfp.domain}</p>
-                        <p><strong>Value:</strong> ₹{winProbability.current_rfp.estimated_value} Cr</p>
+                        <p><strong>{t ? t("StrategicInsights.currentRFP.title","Current RFP:") : "Current RFP:"}</strong> {winProbability.current_rfp.buyer} ({winProbability.current_rfp.buyer_type})</p>
+                        <p><strong>{t ? t("StrategicInsights.currentRFP.domain","Domain:") : "Domain:"}</strong> {winProbability.current_rfp.domain}</p>
+                        <p><strong>{t ? t("StrategicInsights.currentRFP.value","Value:") : "Value:"}</strong> {formatCurrency(winProbability.current_rfp.estimated_value)} Cr</p>
                       </div>
                     )}
                     
                     {winProbability.historical_context && (
                       <div className="text-xs text-muted-foreground pt-2 border-t">
-                        <p><strong>Historical Performance:</strong> {winProbability.historical_context.won_bids} wins / {winProbability.historical_context.total_bids} bids ({winProbability.historical_context.overall_win_rate}% win rate)</p>
+                        <p><strong>{t ? t("StrategicInsights.historical.title","Historical Performance:") : "Historical Performance:"}</strong> {localizeDigits(winProbability.historical_context.won_bids)} wins / {localizeDigits(winProbability.historical_context.total_bids)} bids ({formatPercent(winProbability.historical_context.overall_win_rate)} win rate)</p>
                       </div>
                     )}
                   </div>
@@ -360,7 +467,7 @@ export default function StrategicInsights() {
         </motion.div>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {/* Bar Chart - Bid Value by Status */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -371,7 +478,7 @@ export default function StrategicInsights() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
-                  Bid Value by Status
+                  {t ? t("StrategicInsights.chart.bidValue","Bid Value by Status") : "Bid Value by Status"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -379,8 +486,17 @@ export default function StrategicInsights() {
                   <BarChart data={getBidValueByStatus()}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="status" />
-                    <YAxis label={{ value: 'Value (Cr)', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip formatter={(value) => `₹${value} Cr`} />
+                    <YAxis label={{ value: t ? t("StrategicInsights.table.col.value","Value (Cr)") : 'Value (Cr)', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip
+                      cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.25 }}
+                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                      }}
+                    />
                     <Bar dataKey="value" fill="#3b82f6" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -398,35 +514,46 @@ export default function StrategicInsights() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Database className="h-5 w-5" />
-                  Win Rate by Domain
+                  {t ? t("StrategicInsights.chart.winRate","Win Rate by Domain") : "Win Rate by Domain"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie
-                      data={getWinRateByDomain()}
-                      dataKey="won"
-                      nameKey="domain"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      label={(entry) => `${entry.domain} (${entry.winRate}%)`}
-                    >
-                      {getWinRateByDomain().map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={`hsl(${index * 60}, 70%, 50%)`} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                  <div className="p-5 rounded-lg bg-white/5 border border-white/5">
+                    <div className="h-[250px] w-full">
+                      <PieChart
+                        series={[
+                          {
+                            data: winRatePieData,
+                            outerRadius: 100,
+                            paddingAngle: 2,
+                            highlightScope: { fade: "global", highlight: "item" },
+                            faded: {
+                              innerRadius: 30,
+                              additionalRadius: -12,
+                              color: "hsl(var(--muted))",
+                            },
+                          },
+                        ]}
+                        height={250}
+                        slotProps={{ legend: { sx: { display: "none" } } }}
+                        sx={{
+                          ".MuiChartsTooltip-paper": {
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                            color: "hsl(var(--foreground))",
+                          },
+                        }}
+                      />
+                    </div>
+                  </div>
               </CardContent>
             </Card>
           </motion.div>
         </div>
 
         {/* Historical Explorer and Form */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
           {/* Historical Explorer - 2/3 width */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -438,10 +565,10 @@ export default function StrategicInsights() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Database className="h-5 w-5" />
-                  Historical Bid Explorer
+                  {t ? t("StrategicInsights.table.title","Historical Bid Explorer") : "Historical Bid Explorer"}
                 </CardTitle>
                 <CardDescription>
-                  Browse all past bids with outcomes and insights
+                  {t ? t("StrategicInsights.table.desc","Browse all past bids with outcomes and insights") : "Browse all past bids with outcomes and insights"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -449,13 +576,13 @@ export default function StrategicInsights() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Bid ID</TableHead>
-                        <TableHead>Buyer</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Domain</TableHead>
-                        <TableHead>Value (Cr)</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Days</TableHead>
+                        <TableHead>{t ? t("StrategicInsights.table.col.bidId","Bid ID") : "Bid ID"}</TableHead>
+                        <TableHead>{t ? t("StrategicInsights.table.col.buyer","Buyer") : "Buyer"}</TableHead>
+                        <TableHead>{t ? t("StrategicInsights.table.col.type","Type") : "Type"}</TableHead>
+                        <TableHead>{t ? t("StrategicInsights.table.col.domain","Domain") : "Domain"}</TableHead>
+                        <TableHead>{t ? t("StrategicInsights.table.col.value","Value (Cr)") : "Value (Cr)"}</TableHead>
+                        <TableHead>{t ? t("StrategicInsights.table.col.status","Status") : "Status"}</TableHead>
+                        <TableHead>{t ? t("StrategicInsights.table.col.days","Days") : "Days"}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -469,21 +596,21 @@ export default function StrategicInsights() {
                         pastBids.map((bid) => (
                           <TableRow key={bid.bid_id}>
                             <TableCell className="font-mono text-sm">{bid.bid_id}</TableCell>
-                            <TableCell>{bid.buyer}</TableCell>
+                            <TableCell>{t ? t(`StrategicInsights.pastbid.${bid.bid_id}.buyer`, bid.buyer) : bid.buyer}</TableCell>
                             <TableCell>
-                              <Badge variant="outline">{bid.buyer_type}</Badge>
+                              <Badge variant="outline">{t ? t(`StrategicInsights.pastbid.${bid.bid_id}.buyer_type`, bid.buyer_type) : bid.buyer_type}</Badge>
                             </TableCell>
-                            <TableCell>{bid.domain}</TableCell>
-                            <TableCell>₹{bid.bid_value_cr}</TableCell>
+                            <TableCell>{t ? t(`StrategicInsights.pastbid.${bid.bid_id}.domain`, bid.domain) : bid.domain}</TableCell>
+                            <TableCell>{formatCurrency(bid.bid_value_cr)}</TableCell>
                             <TableCell>
                               <Badge 
                                 variant={bid.status === "Won" ? "default" : "destructive"}
                                 className={bid.status === "Won" ? "bg-green-600" : ""}
                               >
-                                {bid.status}
+                                {t ? t(`StrategicInsights.status.${bid.status}`, bid.status) : bid.status}
                               </Badge>
                             </TableCell>
-                            <TableCell>{bid.delivery_duration_days || "-"}</TableCell>
+                            <TableCell>{bid.delivery_duration_days ? localizeDigits(bid.delivery_duration_days) : "-"}</TableCell>
                           </TableRow>
                         ))
                       )}
@@ -505,38 +632,38 @@ export default function StrategicInsights() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <PlusCircle className="h-5 w-5" />
-                  Add Won Bid
+                  {t ? t("StrategicInsights.form.title","Add Won Bid") : "Add Won Bid"}
                 </CardTitle>
                 <CardDescription>
-                  Capture successful bids to improve predictions
+                  {t ? t("StrategicInsights.form.desc","Capture successful bids to improve predictions") : "Capture successful bids to improve predictions"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmitBid} className="space-y-4">
                   <div>
-                    <Label htmlFor="bid_id">Bid ID *</Label>
+                    <Label htmlFor="bid_id">{t ? t("StrategicInsights.form.bidId","Bid ID *") : "Bid ID *"}</Label>
                     <Input
                       id="bid_id"
                       value={formData.bid_id}
                       onChange={(e) => setFormData({ ...formData, bid_id: e.target.value })}
-                      placeholder="BID-001"
+                      placeholder={t ? t("StrategicInsights.form.bidIdPlaceholder","BID-001") : "BID-001"}
                       required
                     />
                   </div>
 
                   <div>
-                    <Label htmlFor="buyer">Buyer *</Label>
+                    <Label htmlFor="buyer">{t ? t("StrategicInsights.form.buyer","Buyer *") : "Buyer *"}</Label>
                     <Input
                       id="buyer"
                       value={formData.buyer}
                       onChange={(e) => setFormData({ ...formData, buyer: e.target.value })}
-                      placeholder="HPCL"
+                      placeholder={t ? t("StrategicInsights.form.buyerPlaceholder","HPCL") : "HPCL"}
                       required
                     />
                   </div>
 
                   <div>
-                    <Label htmlFor="buyer_type">Buyer Type *</Label>
+                    <Label htmlFor="buyer_type">{t ? t("StrategicInsights.form.buyerType","Buyer Type *") : "Buyer Type *"}</Label>
                     <Select 
                       value={formData.buyer_type}
                       onValueChange={(value) => setFormData({ ...formData, buyer_type: value })}
@@ -545,38 +672,38 @@ export default function StrategicInsights() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="PSU">PSU</SelectItem>
-                        <SelectItem value="Private">Private</SelectItem>
+                        <SelectItem value="PSU">{t ? t("StrategicInsights.buyerType.PSU","PSU") : "PSU"}</SelectItem>
+                        <SelectItem value="Private">{t ? t("StrategicInsights.buyerType.Private","Private") : "Private"}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <Label htmlFor="domain">Domain *</Label>
+                    <Label htmlFor="domain">{t ? t("StrategicInsights.form.domain","Domain *") : "Domain *"}</Label>
                     <Input
                       id="domain"
                       value={formData.domain}
                       onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                      placeholder="Cables"
+                      placeholder={t ? t("StrategicInsights.form.domainPlaceholder","Cables") : "Cables"}
                       required
                     />
                   </div>
 
                   <div>
-                    <Label htmlFor="bid_value_cr">Value (Cr) *</Label>
+                    <Label htmlFor="bid_value_cr">{t ? t("StrategicInsights.form.value","Value (Cr) *") : "Value (Cr) *"}</Label>
                     <Input
                       id="bid_value_cr"
                       type="number"
                       step="0.01"
                       value={formData.bid_value_cr}
                       onChange={(e) => setFormData({ ...formData, bid_value_cr: e.target.value })}
-                      placeholder="12.5"
+                      placeholder={t ? t("StrategicInsights.form.valuePlaceholder","12.5") : "12.5"}
                       required
                     />
                   </div>
 
                   <div>
-                    <Label htmlFor="status">Status *</Label>
+                    <Label htmlFor="status">{t ? t("StrategicInsights.form.status","Status *") : "Status *"}</Label>
                     <Select 
                       value={formData.status}
                       onValueChange={(value) => setFormData({ ...formData, status: value })}
@@ -585,47 +712,47 @@ export default function StrategicInsights() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Won">Won</SelectItem>
-                        <SelectItem value="Lost">Lost</SelectItem>
+                        <SelectItem value="Won">{t ? t("StrategicInsights.status.Won","Won") : "Won"}</SelectItem>
+                        <SelectItem value="Lost">{t ? t("StrategicInsights.status.Lost","Lost") : "Lost"}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <Label htmlFor="pricing_strategy">Pricing Strategy</Label>
+                    <Label htmlFor="pricing_strategy">{t ? t("StrategicInsights.form.pricingStrategy","Pricing Strategy") : "Pricing Strategy"}</Label>
                     <Input
                       id="pricing_strategy"
                       value={formData.pricing_strategy}
                       onChange={(e) => setFormData({ ...formData, pricing_strategy: e.target.value })}
-                      placeholder="Premium"
+                      placeholder={t ? t("StrategicInsights.form.pricingPlaceholder","Premium") : "Premium"}
                     />
                   </div>
 
                   <div>
-                    <Label htmlFor="delivery_duration_days">Delivery Days</Label>
+                    <Label htmlFor="delivery_duration_days">{t ? t("StrategicInsights.form.deliveryDays","Delivery Days") : "Delivery Days"}</Label>
                     <Input
                       id="delivery_duration_days"
                       type="number"
                       value={formData.delivery_duration_days}
                       onChange={(e) => setFormData({ ...formData, delivery_duration_days: e.target.value })}
-                      placeholder="120"
+                      placeholder={t ? t("StrategicInsights.form.deliveryPlaceholder","120") : "120"}
                     />
                   </div>
 
                   <div>
-                    <Label htmlFor="remarks">Remarks</Label>
+                    <Label htmlFor="remarks">{t ? t("StrategicInsights.form.remarks","Remarks") : "Remarks"}</Label>
                     <Textarea
                       id="remarks"
                       value={formData.remarks}
                       onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                      placeholder="Additional notes..."
+                      placeholder={t ? t("StrategicInsights.form.remarksPlaceholder","Additional notes...") : "Additional notes..."}
                       rows={3}
                     />
                   </div>
 
                   <Button type="submit" className="w-full">
                     <PlusCircle className="h-4 w-4 mr-2" />
-                    Add Bid
+                    {t ? t("StrategicInsights.form.addBtn","Add Bid") : "Add Bid"}
                   </Button>
                 </form>
               </CardContent>

@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/useT";
 
 interface KPICardProps {
   title: string;
@@ -32,6 +33,17 @@ export function KPICard({
     info: "bg-info/10 text-info",
   };
 
+  const { t, lang } = useT();
+
+  const localizeNumber = (v: string | number) => {
+    const s = String(v);
+    if (lang === "hi" || lang === "mr") {
+      const map: Record<string, string> = { '0':'०','1':'१','2':'२','3':'३','4':'४','5':'५','6':'६','7':'७','8':'८','9':'९' };
+      return s.replace(/\d/g, d => map[d] || d);
+    }
+    return s;
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -42,9 +54,9 @@ export function KPICard({
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-3xl font-bold text-foreground">{value}</p>
+          <p className="text-3xl font-bold text-foreground">{localizeNumber(value)}</p>
           {subtitle && (
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="text-xs text-muted-foreground">{localizeNumber(subtitle)}</p>
           )}
         </div>
         <div className={cn("rounded-xl p-3", colorClasses[accentColor])}>
@@ -65,9 +77,9 @@ export function KPICard({
             )}
           >
             {trend.isPositive ? "+" : ""}
-            {trend.value}%
+            {localizeNumber(trend.value)}%
           </span>
-          <span className="text-sm text-muted-foreground">vs last month</span>
+          <span className="text-sm text-muted-foreground">{t("KPICard.vsLastMonth","vs last month")}</span>
         </div>
       )}
     </motion.div>

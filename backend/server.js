@@ -14,23 +14,38 @@ import { seedAdmin } from "./utils/seedAdmin.js";
 
 dotenv.config();
 
-if (!process.env.MONGO_URI) {
+const mongoUri = process.env.MONGO_URI || process.env.MONGO_URI2;
+
+if (!mongoUri) {
   console.error("❌ MONGO_URI is not set. Check backend/.env");
   process.exit(1);
 }
 
-const mongoDbName = process.env.MONGO_DB_NAME;
+const getDbNameFromMongoUri = (uri) => {
+  // Matches:
+  // mongodb+srv://user:pass@cluster.mongodb.net/<dbName>?...
+  // mongodb://host:27017/<dbName>?...
+  const match = uri.match(/^mongodb(?:\+srv)?:\/\/[^/]+\/([^?]+)/i);
+  if (!match) return null;
+  const dbName = match[1]?.trim();
+  return dbName ? dbName : null;
+};
+
+const mongoDbNameFromUri = getDbNameFromMongoUri(mongoUri);
+const mongoDbName =
+  process.env.MONGO_DB_NAME ||
+  (mongoDbNameFromUri === null ? "agentic_rfp" : undefined);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 mongoose
-  .connect(process.env.MONGO_URI, mongoDbName ? { dbName: mongoDbName } : {})
+  .connect(mongoUri, mongoDbName ? { dbName: mongoDbName } : {})
   .then(() => {
-    console.log(
-      `✅ MongoDB Connected${mongoDbName ? ` (db: ${mongoDbName})` : ""}`
-    );
+    const connectedDbName = mongoose.connection?.db?.databaseName;
+    const via = process.env.MONGO_URI ? "MONGO_URI" : "MONGO_URI2";
+    console.log(`✅ MongoDB Connected (via ${via})${connectedDbName ? ` (db: ${connectedDbName})` : ""}`);
     seedAdmin(); // keep admin seeding
   })
   .catch((err) => console.error("Mongo Error:", err));

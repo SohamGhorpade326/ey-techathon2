@@ -26,6 +26,8 @@ GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
+Note: The Python backend writes application data into the Mongo database named `agentic_rfp`.
+
 ### How to Get These:
 - **MongoDB**: Create cluster at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
 - **Gmail App Password**: 
@@ -43,6 +45,11 @@ Required for the Node.js backend (user management, SKU gap analysis):
 ```env
 # MongoDB URI
 MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/database_name
+
+# Optional: if your MONGO_URI does not specify a DB name, or if you need to override it.
+# This MUST match the database that contains the SKU gap collection.
+# The SKU Gap Intelligence APIs read from the Mongo collection: sku_gap_intelligence
+MONGO_DB_NAME=database_name
 
 # Server Port
 PORT=5000

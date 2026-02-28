@@ -41,6 +41,26 @@ import { Badge } from "@/components/ui/badge";
 
 const API_BASE = "http://localhost:5000/api/sku-gap";
 
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object";
+
+const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+const isSummary = (v: unknown): v is Summary =>
+  isRecord(v) &&
+  isNumber(v.total_items) &&
+  isNumber(v.avg_match_percent) &&
+  isNumber(v.full_count) &&
+  isNumber(v.partial_count) &&
+  isNumber(v.incomplete_count) &&
+  isNumber(v.total_missing_specs);
+
+const isMatchDistribution = (v: unknown): v is MatchDistribution =>
+  isRecord(v) && isNumber(v.high) && isNumber(v.medium) && isNumber(v.low);
+
+const isRiskValue = (v: unknown): v is RiskValue =>
+  isRecord(v) && isNumber(v.risk_items) && isNumber(v.estimated_risk_score);
+
 interface Summary {
   total_items: number;
   avg_match_percent: number;
@@ -115,20 +135,20 @@ export default function SkuGapAnalytics() {
     try {
       setLoading(true);
 
-  setLoadError(null);
+      setLoadError(null);
 
-  const token = localStorage.getItem("token");
-  const headers = {
-    Authorization: `Bearer ${token}`,
-  };
+      const token = localStorage.getItem("token");
+      const headers: HeadersInit = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
 
-  const safeJson = async (res: Response) => {
-    try {
-      return await res.json();
-    } catch {
-      return null;
-    }
-  };
+      const safeJson = async (res: Response) => {
+        try {
+          return await res.json();
+        } catch {
+          return null;
+        }
+      };
 
       const [
         summaryRes,
@@ -159,13 +179,25 @@ export default function SkuGapAnalytics() {
       const riskData = await safeJson(riskRes);
       const insightsData = await safeJson(insightsRes);
 
-      if (summaryData && typeof summaryData === "object") setSummary(summaryData as Summary);
-      if (Array.isArray(domainData)) setDomainAnalysis(domainData as DomainAnalysis[]);
-      if (Array.isArray(specData)) setSpecFrequency((specData as SpecFrequency[]).slice(0, 10)); // Top 10
-      if (matchData && typeof matchData === "object") setMatchDistribution(matchData as MatchDistribution);
-      if (Array.isArray(recoData)) setRecommendations(recoData as Recommendation[]);
-      if (Array.isArray(timeData)) setTimeline(timeData as Timeline[]);
-      if (riskData && typeof riskData === "object") setRiskValue(riskData as RiskValue);
+      // Only accept payloads that match the expected shapes.
+      const nextSummary = summaryRes.ok && isSummary(summaryData) ? summaryData : null;
+      const nextDomain = domainRes.ok && Array.isArray(domainData) ? (domainData as DomainAnalysis[]) : [];
+      const nextSpec =
+        specRes.ok && Array.isArray(specData)
+          ? (specData as SpecFrequency[]).slice(0, 10) // Top 10
+          : [];
+      const nextMatch = matchRes.ok && isMatchDistribution(matchData) ? matchData : null;
+      const nextReco = recoRes.ok && Array.isArray(recoData) ? (recoData as Recommendation[]) : [];
+      const nextTime = timeRes.ok && Array.isArray(timeData) ? (timeData as Timeline[]) : [];
+      const nextRisk = riskRes.ok && isRiskValue(riskData) ? riskData : null;
+
+      setSummary(nextSummary);
+      setDomainAnalysis(nextDomain);
+      setSpecFrequency(nextSpec);
+      setMatchDistribution(nextMatch);
+      setRecommendations(nextReco);
+      setTimeline(nextTime);
+      setRiskValue(nextRisk);
 
       // Only accept insights if it has the expected shape (prevents blank screen on error payloads)
       if (
@@ -178,18 +210,44 @@ export default function SkuGapAnalytics() {
         setInsights(null);
       }
 
-      // If any endpoint failed (non-OK) or didn't parse, show a small warning.
-      const anyFailed =
-        !summaryRes.ok ||
-        !domainRes.ok ||
-        !specRes.ok ||
-        !matchRes.ok ||
-        !recoRes.ok ||
-        !timeRes.ok ||
-        !riskRes.ok ||
-        !insightsRes.ok;
-      if (anyFailed) {
+      // If any endpoint failed (non-OK), show a clear warning.
+      const responses = [
+        summaryRes,
+        domainRes,
+        specRes,
+        matchRes,
+        recoRes,
+        timeRes,
+        riskRes,
+        insightsRes,
+      ];
+
+      const statuses = responses.map((r) => r.status);
+      const anyFailed = responses.some((r) => !r.ok);
+      const anyUnauthorized = statuses.includes(401);
+      const anyForbidden = statuses.includes(403);
+
+      if (anyUnauthorized) {
+        setLoadError("Session expired or invalid login (401). Please log out and log in again.");
+      } else if (anyForbidden) {
+        setLoadError("Access denied (403). Your role cannot view SKU Gap Intelligence.");
+      } else if (anyFailed) {
         setLoadError("Some analytics widgets failed to load. Refresh to retry.");
+      } else {
+        // All endpoints succeeded; if everything is zero/empty, this is almost always “Mongo has no SKU gap docs”.
+        const totalItems = nextSummary?.total_items ?? 0;
+        const isAllEmpty =
+          totalItems === 0 &&
+          nextDomain.length === 0 &&
+          nextSpec.length === 0 &&
+          nextReco.length === 0 &&
+          nextTime.length === 0;
+
+        if (isAllEmpty) {
+          setLoadError(
+            "No SKU gap data found. Check Mongo has documents in collection 'sku_gap_intelligence' (and that this Node backend is connected to the same database)."
+          );
+        }
       }
       try {
         // Register static UI strings for translation

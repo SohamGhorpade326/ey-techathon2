@@ -41,11 +41,11 @@ export function AppSidebar() {
       initial={{ x: -280 }}
       animate={{ x: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="fixed left-0 top-0 z-40 h-screen w-[280px] bg-sidebar border-r-[0.5px] border-sidebar-border"
+      className="fixed left-0 top-0 z-40 h-screen w-[280px] bg-sidebar border-r border-sidebar-border"
       style={{ background: "var(--gradient-sidebar)" }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-6 border-b-[0.5px] border-sidebar-border">
+      <div className="flex items-center gap-3 px-6 py-6 border-b border-sidebar-border">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary">
           <Sparkles className="h-5 w-5 text-sidebar-primary-foreground" />
         </div>
@@ -116,7 +116,7 @@ export function AppSidebar() {
       </nav>
 
       {/* Agent Status */}
-      <div className="px-4 py-4 border-t-[0.5px] border-sidebar-border">
+      <div className="px-4 py-4 border-t border-sidebar-border">
         <div className="rounded-lg bg-sidebar-accent p-4">
           <p className="text-xs font-medium text-sidebar-muted mb-3 uppercase tracking-wider">
             {useT().t("Sidebar.agentStatus","Agent Status")}
@@ -131,7 +131,7 @@ export function AppSidebar() {
       </div>
 
       {/* User */}
-      <div className="px-4 py-4 border-t-[0.5px] border-sidebar-border">
+      <div className="px-4 py-4 border-t border-sidebar-border">
         <button className="sidebar-link w-full text-sidebar-muted hover:text-sidebar-foreground">
           <LogOut className="h-5 w-5" />
           <span>{useT().t("Sidebar.signOut","Sign Out")}</span>

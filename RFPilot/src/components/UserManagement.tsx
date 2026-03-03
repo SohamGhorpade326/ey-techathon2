@@ -42,13 +42,12 @@ export function UserManagement() {
 
     try {
       const token = localStorage.getItem("token");
-      
-      const response = await fetch("http://localhost:5000/api/auth/create-user", {
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const headers: Record<string,string> = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch(`${API_BASE}/api/auth/create-user`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({ name, email, password, role }),
       });
 

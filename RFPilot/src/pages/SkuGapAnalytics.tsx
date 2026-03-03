@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 
-const API_BASE = "http://localhost:5000/api/sku-gap";
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/sku-gap';
 
 interface Summary {
   total_items: number;

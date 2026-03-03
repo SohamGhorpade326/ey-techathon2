@@ -24,8 +24,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useUser } from '@clerk/clerk-react';
 
-const API = "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
 type NotificationItem = {
   id: string;
@@ -57,16 +58,44 @@ export default function Notifications() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [filter, setFilter] = useState("all");
   const [selectedMail, setSelectedMail] = useState<NotificationItem | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<Record<string,string>>({});
+  const _userHook = useUser();
+  const isSignedIn = _userHook?.isSignedIn;
+  const clerkUser = _userHook?.user;
 
   const fetchNotifications = async () => {
     try {
-      const res = await fetch(`${API}/notifications`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setItems(data);
-      } else {
-        setItems([]);
-      }
+      // Fetch from primary API and also try RFPPilot2 (port 8000) as a source
+      const primaryPromise = fetch(`${API}/notifications`).then((r) => r.ok ? r.json() : [] ).catch(() => []);
+      const secondaryPromise = fetch(`http://127.0.0.1:8000/notifications`).then((r) => r.ok ? r.json() : [] ).catch(() => []);
+
+      const [primaryData, secondaryData] = await Promise.all([primaryPromise, secondaryPromise]);
+
+      const arr1 = Array.isArray(primaryData) ? primaryData : [];
+      const arr2 = Array.isArray(secondaryData) ? secondaryData : [];
+
+      // Merge and deduplicate by message_id or id
+      const seen = new Set();
+      const merged: NotificationItem[] = [];
+      const pushItem = (it: any) => {
+        const key = (it && (it.message_id || it.id)) || JSON.stringify(it);
+        if (!seen.has(key)) {
+          seen.add(key);
+          merged.push(it);
+        }
+      };
+
+      arr1.forEach(pushItem);
+      arr2.forEach(pushItem);
+
+      // Sort by received_timestamp desc if available
+      merged.sort((a: any, b: any) => {
+        const ta = a?.received_timestamp ? new Date(a.received_timestamp).getTime() : 0;
+        const tb = b?.received_timestamp ? new Date(b.received_timestamp).getTime() : 0;
+        return tb - ta;
+      });
+
+      setItems(merged);
     } catch (e) {
       console.error("Failed to fetch notifications", e);
       setItems([]);
@@ -89,8 +118,20 @@ export default function Notifications() {
     setItems((prev) => prev.map((item) => ({ ...item, read: true })));
   };
 
-  const deleteNotification = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
+  const deleteNotification = async (id: string) => {
+    // call backend to remove notification persistently
+    const apiBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || 'http://127.0.0.1:5000';
+    try {
+      const token = localStorage.getItem('token') || '';
+      const headers: Record<string,string> = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${apiBase}/notifications/${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      if (!res.ok) throw new Error(await res.text());
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    } catch (e) {
+      console.error('Failed to delete notification', e);
+      alert('Failed to delete notification: ' + e);
+    }
   };
 
   const getIcon = (type: string) => {
@@ -189,6 +230,7 @@ export default function Notifications() {
           {filteredItems.map((item, index) => {
             // Use message_id as key for proper deduplication, fallback to id
             const itemKey = item.message_id || item.id;
+            
             return (
             <motion.div
               key={itemKey}
@@ -223,7 +265,7 @@ export default function Notifications() {
                   <p className="text-sm text-muted-foreground mb-2">
                     {item.description}
                   </p>
-                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3">
                     <Badge
                       variant="outline"
                       className={cn("text-xs", getAgentColor(item.source || ""))}
@@ -237,6 +279,7 @@ export default function Notifications() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  
                   {item.body && (
                     <Dialog>
                       <DialogTrigger asChild>
@@ -263,6 +306,67 @@ export default function Notifications() {
                       </DialogContent>
                     </Dialog>
                   )}
+                  {/* Approve button for pending_approval notifications (visible to super_admin) */}
+                  {item.type === 'pending_approval' && (() => {
+                    // determine current role from localStorage user or Clerk
+                    const getCurrentRole = () => {
+                      try {
+                        const meta = (clerkUser as any)?.publicMetadata || (clerkUser as any)?.public_metadata || {};
+                        if (meta && meta.role) return String(meta.role || '');
+                      } catch {}
+                      try { return JSON.parse(localStorage.getItem('user') || '{}').role || ''; } catch { return ''; }
+                    };
+                    const currentRole = getCurrentRole();
+                    if (!currentRole || String(currentRole).toLowerCase().replace(/[_\s]/g,'') !== 'superadmin' && String(currentRole).toLowerCase().replace(/[_\s]/g,'') !== 'super_admin') return null;
+
+                    const roleOptions = [
+                      { value: 'super_admin', label: 'Super Admin' },
+                      { value: 'product', label: 'Product' },
+                      { value: 'pricing', label: 'Pricing' },
+                      { value: 'technical', label: 'Technical' },
+                      { value: 'sales', label: 'Sales' },
+                    ];
+
+                    const selected = selectedRoles[item.message_id || item.id] || 'product';
+
+                    return (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={selected}
+                          onChange={(e) => setSelectedRoles(s => ({ ...s, [item.message_id || item.id]: e.target.value }))}
+                          className="text-sm rounded border px-2 py-1 bg-card"
+                        >
+                          {roleOptions.map(ro => <option key={ro.value} value={ro.value}>{ro.label}</option>)}
+                        </select>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            const role = selectedRoles[item.message_id || item.id] || selected;
+                            if (!role) return;
+                            const apiBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || 'http://127.0.0.1:5000';
+                            try {
+                              const token = localStorage.getItem('token') || '';
+                              const headers: Record<string,string> = { 'Content-Type': 'application/json' };
+                              if (token) headers.Authorization = `Bearer ${token}`;
+                              const res = await fetch(`${apiBase}/admin/approve-user`, {
+                                method: 'POST', headers,
+                                body: JSON.stringify({ clerk_user_id: item.message_id, role })
+                              });
+                              if (!res.ok) throw new Error(await res.text());
+                              alert('User approved');
+                              fetchNotifications();
+                            } catch (e) {
+                              console.error('Approve failed', e);
+                              alert('Approve failed: ' + e);
+                            }
+                          }}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })()}
                   {!item.read && (
                     <Button
                       variant="ghost"

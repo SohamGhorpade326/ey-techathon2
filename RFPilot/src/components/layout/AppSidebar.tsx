@@ -41,11 +41,11 @@ export function AppSidebar() {
       initial={{ x: -280 }}
       animate={{ x: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="fixed left-0 top-0 z-40 h-screen w-[280px] bg-sidebar border-r border-sidebar-border"
+      className="fixed left-0 top-0 z-40 h-screen w-[280px] bg-sidebar border-r-[0.5px] border-sidebar-border"
       style={{ background: "var(--gradient-sidebar)" }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-6 border-b border-sidebar-border">
+      <div className="flex items-center gap-3 px-6 py-6 border-b-[0.5px] border-sidebar-border">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary">
           <Sparkles className="h-5 w-5 text-sidebar-primary-foreground" />
         </div>
@@ -55,42 +55,68 @@ export function AppSidebar() {
         </div>
       </div>
 
+      <style>{`
+        @keyframes glitterMove { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .glitter-shimmer {
+          background-image: linear-gradient(90deg, #06b6d4 0%, #3b82f6 50%, #ec4899 100%), linear-gradient(90deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.06) 40%, rgba(255,255,255,0.9) 70%);
+          background-size: 100% 100%, 300% 100%;
+          background-position: 0 0, 200% 0;
+          animation: glitterMove 2.6s linear infinite;
+          border-radius: 9999px;
+          box-shadow: 0 10px 30px rgba(59,130,246,0.10), 0 4px 12px rgba(236,72,153,0.06);
+        }
+      `}</style>
+
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
           return (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={cn(
-                "sidebar-link group relative",
-                isActive && "active"
+            <div key={item.name}>
+              {item.href === '/discovery' && (
+                <div className="w-full my-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-muted mb-1">Neural Layer — Core Agents</div>
+                  <div className="h-[4px] w-full glitter-shimmer" style={{ opacity: 0.9 }} />
+                </div>
               )}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="sidebar-active"
-                  className="absolute inset-0 bg-sidebar-primary rounded-lg"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
-                />
-              )}
-                <span className="relative z-10 flex items-center gap-3">
-                <item.icon className="h-5 w-5" />
-                <span>{useT().t(item.key || item.name, item.name)}</span>
-                {item.badge && (
-                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-medium text-destructive-foreground">
-                    {item.badge}
-                  </span>
+
+              <Link
+                to={item.href}
+                className={cn(
+                  "sidebar-link group relative",
+                  isActive && "active"
                 )}
-              </span>
-            </Link>
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="sidebar-active"
+                    className="absolute inset-0 bg-sidebar-primary rounded-lg"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-3">
+                  <item.icon className="h-5 w-5" />
+                  <span>{useT().t(item.key || item.name, item.name)}</span>
+                  {item.badge && (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-medium text-destructive-foreground">
+                      {item.badge}
+                    </span>
+                  )}
+                </span>
+              </Link>
+
+              {item.href === '/proposal' && (
+                <div className="w-full my-2">
+                  <div className="h-[4px] w-full glitter-shimmer" style={{ opacity: 0.9 }} />
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
 
       {/* Agent Status */}
-      <div className="px-4 py-4 border-t border-sidebar-border">
+      <div className="px-4 py-4 border-t-[0.5px] border-sidebar-border">
         <div className="rounded-lg bg-sidebar-accent p-4">
           <p className="text-xs font-medium text-sidebar-muted mb-3 uppercase tracking-wider">
             {useT().t("Sidebar.agentStatus","Agent Status")}
@@ -105,7 +131,7 @@ export function AppSidebar() {
       </div>
 
       {/* User */}
-      <div className="px-4 py-4 border-t border-sidebar-border">
+      <div className="px-4 py-4 border-t-[0.5px] border-sidebar-border">
         <button className="sidebar-link w-full text-sidebar-muted hover:text-sidebar-foreground">
           <LogOut className="h-5 w-5" />
           <span>{useT().t("Sidebar.signOut","Sign Out")}</span>

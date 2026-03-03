@@ -21,8 +21,9 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["super_admin", "sales", "technical", "pricing", "product"],
+      enum: ["super_admin", "sales", "technical", "pricing", "product", "pending"],
       required: true,
+      default: "pending",
     },
     isActive: {
       type: Boolean,

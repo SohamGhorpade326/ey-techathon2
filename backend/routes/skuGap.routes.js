@@ -5,9 +5,8 @@ import { authorizeRoles } from "../middleware/role.middleware.js";
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
-router.use(verifyToken);
-router.use(authorizeRoles("super_admin", "product", "technical", "pricing"));
+// NOTE: SKU gap endpoints are read-only analytics. Allow public GETs.
+// Protect any future mutating endpoints separately if needed.
 
 /**
  * @route   GET /api/sku-gap/summary

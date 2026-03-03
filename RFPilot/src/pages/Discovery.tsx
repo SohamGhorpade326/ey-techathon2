@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Eye, Trash2, Globe } from "lucide-react";
 import { useTheme } from "@/providers/ThemeProvider";
+import { useUser } from '@clerk/clerk-react';
 import { useT } from "@/hooks/useT";
 
 // Import logo images
@@ -47,7 +48,7 @@ export default function Discovery() {
     registerText("Discovery.title", "RFP Discovery");
     registerText("Discovery.searchPlaceholder", "🔍 Search by title or buyer...");
     registerText("Discovery.clearAll", "Clear All");
-    registerText("Discovery.scrape", "Scrape Official Portals");
+    registerText("Discovery.scrape", "Scrape from Official Websites");
     registerText("Discovery.runAgent", "Run Sales Agent");
     registerText("Discovery.discovering", "Discovering...");
     registerText("Discovery.discoveringDetail", "Please wait while we scan for new opportunities");
@@ -71,6 +72,21 @@ export default function Discovery() {
     registerText("Discovery.notSpecified","Not specified in the provided text");
     registerText("Discovery.approx","Approx.");
   }, [registerText]);
+
+  // Resolve role for conditional UI
+  const { user } = useUser();
+  const getUserRole = () => {
+    if (user && ((user as any).publicMetadata || (user as any).public_metadata)) {
+      const meta = (user as any).publicMetadata || (user as any).public_metadata || {};
+      return meta.role || meta.roles || "";
+    }
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) return JSON.parse(stored).role || "";
+    } catch {}
+    return "";
+  };
+  const currentRole = getUserRole();
 
   const localizeNumber = (v: number | string) => {
     const s = String(v);
@@ -145,7 +161,7 @@ export default function Discovery() {
       } catch (err) {
         console.error("Status check failed", err);
       }
-    }, 12000);
+    }, 15000);
   };
 
   // -----------------------------
@@ -316,12 +332,18 @@ export default function Discovery() {
               {t("Discovery.clearAll","Clear All")}
             </Button>
 
-            <Button 
-              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white border-none shadow-lg shadow-emerald-500/20"
-            >
-              <Globe className="h-4 w-4 mr-2" />
-              {t("Discovery.scrape","Scrape Official Portals")}
-            </Button>
+            
+
+            {/* Manual Override only for technical and superadmin roles */}
+            {(currentRole === 'technical' || currentRole === 'superadmin') && (
+              <Button
+                variant="outline"
+                onClick={() => alert('Manual override triggered (demo)')}
+                className="border border-yellow-400 text-yellow-500"
+              >
+                Manual Override
+              </Button>
+            )}
 
             <Button 
               onClick={runSalesAgent} 
@@ -331,10 +353,10 @@ export default function Discovery() {
               {isRunning ? (
                 <>
                   <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                  {t("Discovery.discovering","Discovering...")}
+                    {t("Discovery.discovering","Discovering...")}
                 </>
               ) : (
-                t("Discovery.runAgent","Run Sales Agent")
+                  t("Discovery.scrape","Scrape from Official Websites")
               )}
             </Button>
           </div>

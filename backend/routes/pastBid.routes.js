@@ -5,29 +5,13 @@ import { authorizeRoles } from "../middleware/role.middleware.js";
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
-router.use(verifyToken);
-router.use(authorizeRoles("super_admin", "product", "technical", "pricing"));
-
 /**
- * @route   GET /api/past-bids
- * @desc    Get all past bids from dummybid collection
- * @access  Authenticated users with appropriate roles
+ * Public: GET /api/past-bids - return list of past bids (read-only)
  */
 router.get("/", pastBidController.getAllPastBids);
 
-/**
- * @route   POST /api/past-bids
- * @desc    Manually insert a new past bid (typically 'Won' bids)
- * @access  Authenticated users with appropriate roles
- */
-router.post("/", pastBidController.createPastBid);
-
-/**
- * @route   GET /api/past-bids/stats
- * @desc    Get statistics and analytics about past bids
- * @access  Authenticated users with appropriate roles
- */
-router.get("/stats", pastBidController.getPastBidStats);
+// Protect mutating or stats routes
+router.post("/", verifyToken, pastBidController.createPastBid);
+router.get("/stats", verifyToken, pastBidController.getPastBidStats);
 
 export default router;

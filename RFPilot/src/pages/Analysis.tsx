@@ -27,18 +27,32 @@ import {
   MessageSquare,
   Sparkles,
   Loader2,
+  Check,
+  Flag,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/useT";
+
+import { useNavigate } from "react-router-dom";
 
 const API = "http://127.0.0.1:8000";
 
 export default function Analysis() {
   const { t, registerText, lang } = useT();
+  const navigate = useNavigate();
   const [expandedRows, setExpandedRows] = useState<number[]>([]);
   const [technicalData, setTechnicalData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSKUs, setSelectedSKUs] = useState<Record<number, string>>({});
+  const [skusList, setSkusList] = useState<any[]>([]);
+  const [skuSearch, setSkuSearch] = useState("");
+  const [openSkuDialogIndex, setOpenSkuDialogIndex] = useState<number | null>(null);
+  const [expertRemapped, setExpertRemapped] = useState<Record<number, boolean>>({});
+  const [editedValues, setEditedValues] = useState<Record<number, any>>({});
+  const [editingPercentIndex, setEditingPercentIndex] = useState<number | null>(null);
+  const [showDisputeIndex, setShowDisputeIndex] = useState<number | null>(null);
+  const [disputeReason, setDisputeReason] = useState<string>("");
   const [showComparison, setShowComparison] = useState(false);
   const [selectedItemForComparison, setSelectedItemForComparison] = useState<any>(null);
   const [showOverride, setShowOverride] = useState(false);
@@ -130,6 +144,107 @@ export default function Analysis() {
 
   const selectSKU = (itemId: number, sku: string) => {
     setSelectedSKUs((prev) => ({ ...prev, [itemId]: sku }));
+    setExpertRemapped((prev) => ({ ...prev, [itemId]: true }));
+  };
+
+  const fetchSKUs = async () => {
+    try {
+      // try main public skus endpoint
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      let res = await fetch(`${API_BASE}/api/public-skus`);
+      let data: any = [];
+      if (res.ok) {
+        try {
+          data = await res.json();
+        } catch (e) {
+          console.warn("/api/public-skus returned non-JSON", e);
+        }
+      } else {
+        // try alternate debug path
+        try {
+          res = await fetch(`${API_BASE}/api/public-skus/list`);
+          if (res.ok) data = await res.json();
+        } catch (e) {
+          console.warn("/api/public-skus/list failed", e);
+        }
+      }
+
+      // final fallback to /api/products (may be protected)
+      if ((!data || data.length === 0)) {
+        try {
+          const res2 = await fetch(`${API_BASE}/api/products`);
+          if (res2.ok) {
+            const data2 = await res2.json();
+            if (data2 && data2.length > 0) data = data2;
+          } else {
+            console.warn(`/api/products returned status ${res2.status}`);
+          }
+        } catch (e) {
+          console.warn("/api/products fallback failed", e);
+        }
+      }
+
+      setSkusList(data || []);
+    } catch (e) {
+      console.error("Failed to fetch SKUs", e);
+    }
+  };
+
+  const openSkuDialog = async (index: number, e?: any) => {
+    e && e.stopPropagation();
+    if (skusList.length === 0) await fetchSKUs();
+    setSkuSearch("");
+    setOpenSkuDialogIndex(index);
+  };
+
+  const closeSkuDialog = () => setOpenSkuDialogIndex(null);
+
+  const applySkuSelection = (index: number, skuDoc: any) => {
+    // prefer canonical SKU code fields when available
+    const skuCode = skuDoc.sku_code || skuDoc.code || skuDoc.skuCode || skuDoc.product_code || skuDoc._id;
+    const skuLabel = skuCode || skuDoc.product_name || skuDoc.productName || skuDoc.name || skuDoc.title || skuDoc._id;
+    // store the code in selectedSKUs so the table shows SKU code by default
+    selectSKU(index, skuCode || skuLabel);
+    setEditedValues((prev) => ({ ...prev, [index]: { ...(prev[index] || {}), sku_value: skuCode || skuLabel, sku_name: skuDoc.product_name || skuDoc.productName || skuDoc.name || skuDoc.title } }));
+    // update technicalData to reflect this as the primary best_match_sku
+    setTechnicalData((prev: any) => {
+      if (!prev) return prev;
+      const items = (prev.items || []).map((it: any, idx: number) => {
+        if (idx !== index) return it;
+        const newItem = { ...it, best_match_sku: skuCode || skuLabel };
+        // if alternatives list exists, try to move chosen SKU to first position
+        if (Array.isArray(newItem.top_3_alternatives) && newItem.top_3_alternatives.length > 0) {
+          const code = skuCode || skuLabel;
+          const foundIdx = newItem.top_3_alternatives.findIndex((a: any) => (a.sku_code === code) || (a.sku_code === skuLabel) || (a.sku_code === (skuDoc._id)) );
+          if (foundIdx > 0) {
+            const arr = [...newItem.top_3_alternatives];
+            const [p] = arr.splice(foundIdx, 1);
+            arr.unshift(p);
+            newItem.top_3_alternatives = arr;
+          }
+        }
+        return newItem;
+      });
+      return { ...prev, items };
+    });
+    closeSkuDialog();
+  };
+
+  const startEditPercent = (index:number, e?:any) => { e && e.stopPropagation(); setEditingPercentIndex(index); setEditedValues((prev)=>({ ...prev, [index]: { ...(prev[index]||{}), spec_match_percent: technicalData.items[index].spec_match_percent } })); };
+
+  const saveEditedPercent = (index:number, value:any) => {
+    const v = Number(value);
+    setEditedValues((prev) => ({ ...prev, [index]: { ...(prev[index] || {}), spec_match_percent: isNaN(v) ? value : v } }));
+    setEditingPercentIndex(null);
+    setExpertRemapped((prev) => ({ ...prev, [index]: true }));
+  };
+
+  const openDispute = (index:number, e?:any) => { e && e.stopPropagation(); setShowDisputeIndex(index); setDisputeReason(""); };
+
+  const saveDispute = () => {
+    if (showDisputeIndex === null) return;
+    setEditedValues((prev) => ({ ...prev, [showDisputeIndex]: { ...(prev[showDisputeIndex] || {}), disputeReason } }));
+    setShowDisputeIndex(null);
   };
 
   const showComparisonMatrix = (item: any) => {
@@ -219,7 +334,6 @@ export default function Analysis() {
                   <TableHead>{t ? t("Analysis.col.requiredSpecs","Required Technical Specs") : "Required Technical Specs"}</TableHead>
                   <TableHead>{t ? t("Analysis.col.bestMatch","Best Match SKU") : "Best Match SKU"}</TableHead>
                   <TableHead className="text-center">{t ? t("Analysis.col.specMatch","Spec-Match %") : "Spec-Match %"}</TableHead>
-                  <TableHead className="text-center">{t ? t("Analysis.col.status","Status") : "Status"}</TableHead>
                   <TableHead className="text-right">{t ? t("Analysis.col.actions","Actions") : "Actions"}</TableHead>
                 </TableRow>
             </TableHeader>
@@ -241,6 +355,63 @@ export default function Analysis() {
                       >
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </motion.div>
+
+                      {/* SKU Re-mapper Dialog */}
+                      <Dialog open={openSkuDialogIndex !== null} onOpenChange={(open) => { if (!open) setOpenSkuDialogIndex(null); }}>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Search & Re-map SKU</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-3">
+                            <Input
+                              placeholder="Search SKUs or product names"
+                              value={skuSearch}
+                              onChange={(e) => setSkuSearch(e.target.value)}
+                            />
+                            <div className="max-h-64 overflow-y-auto">
+                              {(skusList || []).filter((s:any)=>{
+                                const q = skuSearch.trim().toLowerCase();
+                                if (!q) return true;
+                                const text = `${s.sku_code||''} ${s.product_name||s.name||''}`.toLowerCase();
+                                return text.includes(q);
+                              }).slice(0,200).map((s:any)=> (
+                                <div key={s._id || s.sku_code} className="p-2 hover:bg-muted/20 cursor-pointer" onClick={() => applySkuSelection(openSkuDialogIndex as number, s)}>
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <div className="font-mono text-sm">{s.sku_code || s._id}</div>
+                                      <div className="text-xs text-muted-foreground">{s.product_name || s.name}</div>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">Select</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex justify-end">
+                              <Button variant="outline" onClick={() => setOpenSkuDialogIndex(null)}>Close</Button>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+
+                      {/* Dispute Dialog */}
+                      <Dialog open={showDisputeIndex !== null} onOpenChange={(open) => { if (!open) setShowDisputeIndex(null); }}>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Dispute Confidence</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-3">
+                            <div className="flex flex-col gap-2">
+                              <label className="flex items-center gap-2"><input type="radio" name="reason" value="AI Misread PDF" onChange={(e)=>setDisputeReason(e.target.value)} /> AI Misread PDF</label>
+                              <label className="flex items-center gap-2"><input type="radio" name="reason" value="Outdated SKU Data" onChange={(e)=>setDisputeReason(e.target.value)} /> Outdated SKU Data</label>
+                              <label className="flex items-center gap-2"><input type="radio" name="reason" value="Alternative Approved" onChange={(e)=>setDisputeReason(e.target.value)} /> Alternative Approved</label>
+                            </div>
+                            <div className="flex justify-end gap-3">
+                              <Button variant="outline" onClick={() => setShowDisputeIndex(null)}>Cancel</Button>
+                              <Button onClick={saveDispute} disabled={!disputeReason}>Save Dispute</Button>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     </TableCell>
                     <TableCell className="font-medium">{t ? t(`Technical.${technicalData.rfp_id}.item.${index}.item_name`, item.item_name) : item.item_name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
@@ -250,31 +421,75 @@ export default function Analysis() {
                       {(() => {
                         const chosen = selectedSKUs[index] || item.best_match_sku;
                         const altIdx = item.top_3_alternatives?.findIndex((a: any) => a.sku_code === chosen) ?? -1;
+                        const expertFlag = expertRemapped[index];
                         if (altIdx >= 0) {
                           const alt = item.top_3_alternatives[altIdx];
                           const descKey = `Technical.${technicalData.rfp_id}.item.${index}.alt.${altIdx}.sku_description`;
                           const desc = t ? t(descKey, alt.sku_description) : alt.sku_description;
                           return (
                             <div className="flex flex-col">
-                              <span className="font-mono text-sm">{chosen}</span>
+                              <button
+                                onClick={(e) => openSkuDialog(index, e)}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className="text-left hover:underline"
+                                title="Open SKU re-mapper"
+                              >
+                                <span className="font-mono text-sm">{chosen}</span>
+                              </button>
                               <span className="text-xs text-muted-foreground">{desc}</span>
+                              {expertFlag && <span className="text-xs text-success mt-1">Expert Re-mapped</span>}
                             </div>
                           );
                         }
 
-                        // fallback to registered best_match_sku or raw code
-                        const bmKey = `Technical.${technicalData.rfp_id}.item.${index}.best_match_sku`;
-                        const bm = t ? t(bmKey, item.best_match_sku) : item.best_match_sku;
-                        return <span className="font-mono text-sm">{bm}</span>;
+                        // if user selected a SKU (selectedSKUs), show that choice even if it's not in alternatives
+                        const chosenLabel = chosen;
+                        const chosenName = editedValues[index]?.sku_name;
+                        return (
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={(e) => openSkuDialog(index, e)}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className="text-left hover:underline"
+                                title="Open SKU re-mapper"
+                              >
+                                <span className="font-mono text-sm">{chosenLabel}</span>
+                              </button>
+                              {expertFlag && <Badge className="text-xs">Expert Re-mapped</Badge>}
+                            </div>
+                            {editedValues[index]?.sku_name && (
+                              <span className="text-xs text-muted-foreground">{editedValues[index].sku_name}</span>
+                            )}
+                          </div>
+                        );
                       })()}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge className={cn("border", getMatchColor(item.spec_match_percent))}>
-                        {localizeDigits(item.spec_match_percent?.toFixed(0))}%
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {getStatusIcon(item.status)}
+                      <div className="inline-flex items-center gap-2">
+                        {editingPercentIndex === index ? (
+                          <Input
+                            className="w-20"
+                            value={editedValues[index]?.spec_match_percent ?? item.spec_match_percent}
+                            onChange={(e) => setEditedValues((prev)=>({ ...prev, [index]: { ...(prev[index]||{}), spec_match_percent: e.target.value } }))}
+                            onBlur={(e) => saveEditedPercent(index, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveEditedPercent(index, (e.target as HTMLInputElement).value); }}
+                            autoFocus
+                          />
+                        ) : (
+                          <>
+                            <Badge className={cn("border", getMatchColor(item.spec_match_percent))} onClick={(e)=>{ e.stopPropagation(); startEditPercent(index); }}>
+                              {localizeDigits((editedValues[index]?.spec_match_percent ?? item.spec_match_percent)?.toFixed ? (editedValues[index]?.spec_match_percent ?? item.spec_match_percent).toFixed(0) : editedValues[index]?.spec_match_percent ?? item.spec_match_percent)}%
+                            </Badge>
+                            <Button variant="ghost" size="sm" onClick={(e)=>{ e.stopPropagation(); openDispute(index, e); }} title="Dispute">
+                              <Flag className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            {editedValues[index]?.spec_match_percent !== undefined && (
+                              <span title="Verified by Technical Expert"><Check className="h-4 w-4 text-success" /></span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -318,7 +533,7 @@ export default function Analysis() {
                   <AnimatePresence>
                     {expandedRows.includes(index) && (
                       <TableRow>
-                        <TableCell colSpan={7} className="p-0">
+                          <TableCell colSpan={6} className="p-0">
                           <motion.div
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: "auto", opacity: 1 }}
@@ -391,9 +606,9 @@ export default function Analysis() {
           </p>
           <div className="flex gap-3">
             <Button variant="outline">{t ? t("Analysis.saveDraft","Save Draft") : "Save Draft"}</Button>
-            <Button>
+            <Button onClick={() => navigate('/pricing')}>
               <CheckCircle2 className="h-4 w-4 mr-2" />
-              {t ? t("Analysis.confirmSelected","Confirm Selected SKUs") : "Confirm Selected SKUs"}
+              {t ? t("Analysis.goNext","Go to next page") : "Go to next page"}
             </Button>
           </div>
         </motion.div>

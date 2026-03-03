@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useUser } from '@clerk/clerk-react';
 import Papa from "papaparse";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useT } from "@/hooks/useT";
@@ -32,8 +33,8 @@ import {
   Download,
 } from "lucide-react";
 
-const API = "http://localhost:5000/api/products";
-const TESTING_API = "http://localhost:5000/api/testing-matrix";
+const API = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/products';
+const TESTING_API = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/testing-matrix';
 
 export default function Repository() {
   const { t, registerText, lang } = useT();
@@ -63,10 +64,9 @@ export default function Repository() {
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("token");
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    };
+    const headers: Record<string,string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
   };
 
   const loadProducts = () => {
@@ -128,6 +128,32 @@ export default function Repository() {
     loadProducts();
     loadTestingMatrix();
   }, []);
+
+  // Determine role (Clerk first, fallback to localStorage)
+  const { user } = useUser();
+  const getUserRole = () => {
+    let roleVal: any = "";
+    if (user && ((user as any).publicMetadata || (user as any).public_metadata)) {
+      const meta = (user as any).publicMetadata || (user as any).public_metadata || {};
+      if (meta.role) roleVal = meta.role;
+      else if (meta.roles) roleVal = meta.roles;
+    } else {
+      try {
+        const stored = localStorage.getItem('user');
+        if (stored) roleVal = JSON.parse(stored).role || "";
+      } catch {}
+    }
+    if (Array.isArray(roleVal)) return roleVal.join(',');
+    return String(roleVal || "");
+  };
+
+  const normalizeRole = (r: string) => r ? r.toLowerCase().replace(/[_\s]/g, '') : '';
+  const hasAnyRole = (...roles: string[]) => {
+    const cur = normalizeRole(getUserRole());
+    return roles.some(r => cur.includes(normalizeRole(r)));
+  };
+
+  const currentRole = getUserRole();
 
   const filteredProducts = products.filter(
     (p) =>
@@ -345,21 +371,23 @@ export default function Repository() {
             <Badge variant="outline">{localizeDigits(products.length)} {t ? t("Repository.productsLabel","Products") : "Products"}</Badge>
           </div>
 
-        <div className="flex gap-2">
-          {/* UPDATED: Export Button replaces Template button */}
-          <Button variant="outline" onClick={exportCSV}>
-            <Download className="h-4 w-4 mr-2" /> {t ? t("Repository.exportCSV","Export CSV") : "Export CSV"}
-          </Button>
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-4 w-4 mr-2" /> {t ? t("Repository.importCSV","Import CSV") : "Import CSV"}
-          </Button>
-          <Button 
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={() => setShowAddDialog(true)}
-          >
-            <Plus className="h-4 w-4 mr-2" /> {t ? t("Repository.addProduct","Add Product") : "Add Product"}
-          </Button>
-        </div>
+        { (hasAnyRole('product','super_admin','superadmin')) && (
+          <div className="flex gap-2">
+            {/* UPDATED: Export Button replaces Template button */}
+            <Button variant="outline" onClick={exportCSV}>
+              <Download className="h-4 w-4 mr-2" /> {t ? t("Repository.exportCSV","Export CSV") : "Export CSV"}
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="h-4 w-4 mr-2" /> {t ? t("Repository.importCSV","Import CSV") : "Import CSV"}
+            </Button>
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => setShowAddDialog(true)}
+            >
+              <Plus className="h-4 w-4 mr-2" /> {t ? t("Repository.addProduct","Add Product") : "Add Product"}
+            </Button>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="products">
@@ -400,18 +428,22 @@ export default function Repository() {
                       <Button size="icon" variant="ghost" onClick={() => setSelectedProduct(p)}>
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" onClick={() => {
-                        setEditProduct(p);
-                        setSkuCode(p.sku_code);
-                        setProductName(p.product_name);
-                        setUnitPrice(String(p.unit_price_inr));
-                        setCustomFields(getExtraFields(p).map(([k, v]) => ({ key: k, value: String(v) })));
-                      }}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteProduct(p._id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      { (hasAnyRole('product','super_admin','superadmin')) && (
+                        <>
+                          <Button size="icon" variant="ghost" onClick={() => {
+                            setEditProduct(p);
+                            setSkuCode(p.sku_code);
+                            setProductName(p.product_name);
+                            setUnitPrice(String(p.unit_price_inr));
+                            setCustomFields(getExtraFields(p).map(([k, v]) => ({ key: k, value: String(v) })));
+                          }}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteProduct(p._id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

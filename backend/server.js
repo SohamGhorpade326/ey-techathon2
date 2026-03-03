@@ -4,12 +4,15 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import productRoutes from "./routes/product.js";
+import publicSkusRoutes from "./routes/publicSkus.js";
 import rfpRoutes from "./routes/rfps.js";
 import testingMatrixRoutes from "./routes/testingMatrix.js";
 import skuGapRoutes from "./routes/skuGap.routes.js";
 import skuGapAIRoutes from "./routes/skuGapAI.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import adminRoutes from "./routes/admin.js";
 import pastBidRoutes from "./routes/pastBid.routes.js";
+import debugRoutes from "./routes/debug.js";
 import { seedAdmin } from "./utils/seedAdmin.js";
 
 dotenv.config();
@@ -40,12 +43,15 @@ mongoose.connection.on("error", (err) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/", adminRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/public-skus", publicSkusRoutes);
 app.use("/api/rfps", rfpRoutes);
 app.use("/api/testing-matrix", testingMatrixRoutes);
 app.use("/api/sku-gap", skuGapRoutes);
 app.use("/api/sku-gap/insights", skuGapAIRoutes);
 app.use("/api/past-bids", pastBidRoutes);
+app.use("/api/debug", debugRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>

@@ -11,6 +11,7 @@ from datetime import datetime
 import base64
 import os
 from dotenv import load_dotenv
+import requests
 import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr
@@ -249,6 +250,307 @@ except Exception as e:
     print(f"⚠️ MongoDB connection failed: {e}")
     mongo_db = None
     past_bids_collection = None
+else:
+    # Ensure we have a users collection reference for auth sync operations
+    try:
+        users_collection = mongo_db["users"]
+    except Exception:
+        users_collection = None
+
+from fastapi import Depends, HTTPException, Request
+import json
+import base64
+import logging
+
+# Optional PyJWT + JWK support for proper token verification
+try:
+    from jwt import PyJWKClient, decode as jwt_decode, InvalidTokenError
+    JWT_AVAILABLE = True
+except Exception:
+    PyJWKClient = None
+    jwt_decode = None
+    InvalidTokenError = Exception
+    JWT_AVAILABLE = False
+
+logger = logging.getLogger("main_new")
+logger.setLevel(logging.INFO)
+
+
+def _decode_jwt_unverified(token: str) -> dict:
+    """Lightweight JWT payload decoder WITHOUT signature verification.
+
+    NOTE: This is intended for demo/testing only. Replace with proper
+    verification (JWKS + PyJWT) for production.
+    """
+    try:
+        parts = token.split('.')
+        if len(parts) < 2:
+            return {}
+        payload_b64 = parts[1]
+        # Add padding
+        padding = '=' * (-len(payload_b64) % 4)
+        payload_b64 += padding
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        return json.loads(payload_bytes.decode('utf-8'))
+    except Exception:
+        return {}
+
+
+def _verify_jwt_with_jwks(token: str) -> dict:
+    """Verify JWT using JWKS endpoint if configured. Returns claims or raises."""
+    jwks_url = os.getenv("CLERK_JWKS_URL")
+    issuer = os.getenv("CLERK_ISSUER")
+    if not JWT_AVAILABLE or not jwks_url:
+        raise RuntimeError("JWT verification not available or CLERK_JWKS_URL not configured")
+    try:
+        jwk_client = PyJWKClient(jwks_url)
+        signing_key = jwk_client.get_signing_key_from_jwt(token)
+        public_key = signing_key.key
+        # Some Clerk tokens may not include audience; disable aud verification
+        options = {"verify_aud": False}
+        claims = jwt_decode(token, public_key, algorithms=["RS256"], issuer=issuer, options=options)
+        return claims
+    except InvalidTokenError as e:
+        raise
+    except Exception as e:
+        raise
+
+
+def ClerkAuth(request: Request):
+    """FastAPI dependency that extracts Clerk JWT claims and performs a
+    first-time MongoDB user upsert using role information from the token.
+
+    This performs no cryptographic verification of the token payload and
+    therefore should be replaced with proper verification in production.
+    """
+    auth = request.headers.get("Authorization") or request.headers.get("authorization")
+    if not auth or not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization Bearer token")
+
+    token = auth.split(" ", 1)[1].strip()
+    claims = {}
+    # Try proper verification first
+    try:
+        try:
+            claims = _verify_jwt_with_jwks(token)
+            logger.info(f"[ClerkAuth] Verified JWT via JWKS for token sub={claims.get('sub')}")
+        except Exception as e:
+            # Fallback to unverified decode for demo/dev
+            logger.warning(f"[ClerkAuth] JWKS verification failed: {e} - falling back to unverified decode")
+            claims = _decode_jwt_unverified(token)
+    except Exception as e:
+        logger.error(f"[ClerkAuth] Token decode error: {e}")
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # Identify Clerk user id and role from common claim locations
+    user_id = claims.get("sub") or claims.get("user_id") or claims.get("uid")
+    role = None
+    # Clerk may surface custom role in top-level claims or in public_metadata
+    role = claims.get("role") or claims.get("org_role") or None
+    public_metadata = claims.get("public_metadata") or {}
+    if isinstance(public_metadata, dict):
+        role = role or public_metadata.get("role") or public_metadata.get("roles")
+
+    # Fallback to nested clerk-specific claim patterns
+    if not role:
+        role = claims.get("claims", {}).get("role") if isinstance(claims.get("claims"), dict) else None
+
+    # Persist user to MongoDB on first-seen (upsert)
+    try:
+        if 'mongo_db' in globals() and mongo_db is not None and users_collection is not None and user_id:
+            existing = users_collection.find_one({"clerk_user_id": user_id})
+            if not existing:
+                doc = {
+                    "clerk_user_id": user_id,
+                    "email": claims.get("email") or claims.get("emails") or None,
+                    "role": role or "",
+                    "status": "pending" if not role else "active",
+                    "raw_claims": claims,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                try:
+                    users_collection.insert_one(doc)
+                    print(f"[ClerkAuth] Created new user record for {user_id}")
+                    # Add admin notification for new signup pending approval
+                    try:
+                        notif = {
+                            "id": str(uuid.uuid4()),
+                            "type": "warning",
+                            "title": "New user signup pending approval",
+                            "description": doc.get("email") or str(user_id),
+                            "body": f"User {user_id} signed up and requires role assignment.",
+                            "message_id": str(user_id),
+                            "received_timestamp": datetime.utcnow().isoformat(),
+                            "source": "signup",
+                            "read": False,
+                        }
+                        # Prefer MongoDB notifications collection when available
+                        try:
+                            if 'mongo_db' in globals() and mongo_db is not None:
+                                coll = mongo_db.get_collection("notifications")
+                                coll.insert_one(notif)
+                            else:
+                                add_notification(notif)
+                        except Exception as _:
+                            # Fallback to in-memory
+                            try:
+                                add_notification(notif)
+                            except Exception:
+                                pass
+                    except Exception as _:
+                        pass
+                except Exception as e:
+                    print(f"[ClerkAuth] Failed to insert user record: {e}")
+    except Exception as e:
+        print(f"[ClerkAuth] MongoDB users upsert error: {e}")
+
+    return {"user_id": user_id, "role": role, "claims": claims}
+
+
+def check_role(required_roles: list):
+    """Factory returning a FastAPI dependency that enforces role membership."""
+    def _checker(auth=Depends(ClerkAuth)):
+        user_role = (auth or {}).get("role") or ""
+        def _norm(r):
+            try:
+                return str(r or '').lower().replace('_','').replace('-','').replace(' ','')
+            except Exception:
+                return ''
+
+        req_norm = [_norm(r) for r in required_roles]
+        if isinstance(user_role, list):
+            user_norms = [_norm(r) for r in user_role]
+            has = any(u in req_norm or u == rr for u in user_norms for rr in req_norm)
+        else:
+            has = _norm(user_role) in req_norm
+        if not has:
+            raise HTTPException(status_code=403, detail="Insufficient role for this endpoint")
+        return auth
+    return _checker
+
+
+def check_role_or_local(required_roles: list):
+    """Allow access if request originates from localhost OR user has required role."""
+    def _checker(request: Request):
+        # If an Authorization header is present, validate role normally
+        auth_header = request.headers.get('authorization') or request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            auth = ClerkAuth(request)
+            user_role = (auth or {}).get('role') or ''
+            def _norm(r):
+                try:
+                    return str(r or '').lower().replace('_','').replace('-','').replace(' ','')
+                except Exception:
+                    return ''
+            req_norm = [_norm(r) for r in required_roles]
+            if isinstance(user_role, list):
+                user_norms = [_norm(r) for r in user_role]
+                has = any(u in req_norm or u == rr for u in user_norms for rr in req_norm)
+            else:
+                has = _norm(user_role) in req_norm
+            if not has:
+                raise HTTPException(status_code=403, detail='Insufficient role for this endpoint')
+            return auth
+
+        # No auth header: allow if request from localhost (internal agent)
+        client_host = request.client.host if request.client else None
+        if client_host in ('127.0.0.1', '::1', 'localhost'):
+            return { 'user_id': 'local', 'role': 'local' }
+
+        raise HTTPException(status_code=401, detail='Missing Authorization Bearer token')
+
+    return _checker
+
+
+# -------------------------
+# Admin endpoints: pending users & approval
+# -------------------------
+
+
+@app.get("/admin/pending-users")
+def get_pending_users(auth=Depends(check_role(["super_admin"]))):
+    if users_collection is None:
+        raise HTTPException(status_code=500, detail="Users collection not configured")
+    pending = []
+    try:
+        cursor = users_collection.find({"status": "pending"})
+        for u in cursor:
+            pending.append({
+                "clerk_user_id": u.get("clerk_user_id"),
+                "email": u.get("email"),
+                "created_at": u.get("created_at"),
+                "raw_claims": u.get("raw_claims"),
+            })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return pending
+
+
+class ApproveRequest(BaseModel):
+    clerk_user_id: str
+    role: str
+
+
+@app.post("/admin/approve-user")
+def approve_user(req: ApproveRequest, auth=Depends(check_role(["super_admin"]))):
+    clerk_api_key = os.getenv("CLERK_API_KEY") or os.getenv("CLERK_SERVER_KEY")
+    if not clerk_api_key:
+        raise HTTPException(status_code=500, detail="CLERK_API_KEY not configured on server")
+
+    user_id = req.clerk_user_id
+    role = req.role
+    # Call Clerk server API to patch public metadata
+    try:
+        url = f"https://api.clerk.dev/v1/users/{user_id}"
+        headers = {"Authorization": f"Bearer {clerk_api_key}", "Content-Type": "application/json"}
+        payload = {"public_metadata": {"role": role}}
+        r = requests.patch(url, json=payload, headers=headers, timeout=10)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"Clerk API error: {r.status_code} {r.text}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Update local DB
+    try:
+        users_collection.update_one({"clerk_user_id": user_id}, {"$set": {"role": role, "status": "active", "approved_at": datetime.utcnow().isoformat()}})
+    except Exception as e:
+        print(f"[ApproveUser] DB update failed: {e}")
+
+    # Add notification for the approved user (optional)
+    try:
+        notif = {
+            "id": str(uuid.uuid4()),
+            "type": "success",
+            "title": "Your account was approved",
+            "description": f"Role assigned: {role}",
+            "body": f"Your account has been approved and assigned role {role}.",
+            "message_id": user_id,
+            "received_timestamp": datetime.utcnow().isoformat(),
+            "source": "system",
+            "read": False,
+        }
+        # Prefer MongoDB notifications collection when available
+        try:
+            if 'mongo_db' in globals() and mongo_db is not None:
+                coll = mongo_db.get_collection("notifications")
+                coll.insert_one(notif)
+                print("[Gmail Ingest] Notification stored in MongoDB notifications collection")
+            else:
+                add_notification(notif)
+                print("[Gmail Ingest] Notification stored in in-memory store")
+        except Exception as e:
+            # Fallback to in-memory store if Mongo insert fails
+            try:
+                add_notification(notif)
+                print(f"[Gmail Ingest] Mongo insert failed, stored in memory: {e}")
+            except Exception:
+                print(f"[Gmail Ingest] Failed to persist notification: {e}")
+    except Exception:
+        pass
+
+    return {"status": "ok"}
 
 # Dedicated single-thread executor for pipeline (avoids Playwright greenlet conflicts)
 # All pipeline operations run in the same thread where Playwright browser is initialized
@@ -333,6 +635,17 @@ async def startup_event():
         _pipeline_executor.submit(warmup_pipeline)
     
     asyncio.create_task(delayed_warmup())
+
+
+
+@app.post("/auth/sync")
+def auth_sync(auth=Depends(ClerkAuth)):
+    """Trigger server-side sync/upsert for the currently-signed-in Clerk user.
+
+    Frontend should call this after sign-in with Authorization: Bearer <Clerk token>.
+    The ClerkAuth dependency performs the upsert and notification logic.
+    """
+    return {"status": "ok", "user": {"id": auth.get("user_id"), "role": auth.get("role")}}
 
 
 # Background runner
@@ -817,7 +1130,53 @@ def ingest_gmail_rfp_event(event: GmailRfpEvent):
 
 @app.get("/notifications")
 def get_notifications():
-    # Return newest first
+    # Prefer MongoDB-backed notifications when available, else fallback to in-memory store
+    try:
+        if 'mongo_db' in globals() and mongo_db is not None:
+            coll = mongo_db.get_collection("notifications")
+            cursor = coll.find({}).sort("received_timestamp", -1).limit(200)
+            out = []
+            for n in cursor:
+                n = dict(n)
+                # sanitize ObjectId
+                if n.get("_id") is not None:
+                    try:
+                        n["_id"] = str(n["_id"])
+                    except Exception:
+                        pass
+                out.append(n)
+            # Also include any in-memory notifications (merge, dedupe by message_id or id)
+            try:
+                mem = list_notifications()
+                if mem:
+                    seen = set()
+                    merged = []
+                    # add mongo items first
+                    for it in out:
+                        key = (it.get("message_id") or it.get("id"))
+                        if key is None:
+                            key = f"mongo-{len(merged)}"
+                        seen.add(str(key))
+                        merged.append(it)
+                    # add memory items that aren't duplicates
+                    for it in mem:
+                        key = (it.get("message_id") or it.get("id"))
+                        if key is None:
+                            key = f"mem-{len(merged)}"
+                        if str(key) not in seen:
+                            merged.append(it)
+                            seen.add(str(key))
+                    # sort by timestamp desc
+                    merged.sort(key=lambda n: str(n.get("received_timestamp") or ""), reverse=True)
+                    print(f"[Notifications] Returned {len(merged)} merged notifications (mongo + memory)")
+                    return merged
+            except Exception as e:
+                print(f"[Notifications] Failed to merge in-memory notifications: {e}")
+            return out
+    except Exception as e:
+        print(f"[Notifications] MongoDB fetch failed: {e}")
+
+    # Fallback to in-memory list
     notifs = list_notifications()
     def _ts(n: Dict[str, Any]):
         return str(n.get("received_timestamp") or "")
@@ -835,6 +1194,63 @@ def reset_gmail_data():
     """Clear all Gmail emails, processed IDs, and notifications (useful for testing)"""
     clear_gmail_data()
     return {"status": "cleared", "message": "All Gmail data and notifications cleared"}
+
+
+@app.get("/debug/notifications-info")
+def debug_notifications_info():
+    """Return debug info about in-memory Gmail emails and notifications."""
+    try:
+        gmail_list = list_gmail_emails()
+        notifs = list_notifications()
+        return {
+            "gmail_count": len(gmail_list),
+            "notifications_count": len(notifs),
+            "gmail_sample": gmail_list[-5:],
+            "notifications_sample": notifs[-10:],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+class RequestAccessRequest(BaseModel):
+    clerk_user_id: str
+    email: Optional[str] = None
+
+
+@app.post("/request-access")
+def request_access(req: RequestAccessRequest):
+    """Save a 'Pending Approval' notification in MongoDB (or fallback to in-memory).
+
+    Expected body: { "clerk_user_id": "abc", "email": "user@example.com" }
+    """
+    notif = {
+        "id": str(uuid.uuid4()),
+        "type": "pending_approval",
+        "title": "New access request",
+        "description": req.email or req.clerk_user_id,
+        "body": f"User {req.clerk_user_id} requested access (email: {req.email})",
+        "message_id": req.clerk_user_id,
+        "received_timestamp": datetime.utcnow().isoformat(),
+        "source": "request_access",
+        "read": False,
+    }
+
+    try:
+        if 'mongo_db' in globals() and mongo_db is not None:
+            coll = mongo_db.get_collection("notifications")
+            # Insert document as-is
+            coll.insert_one(notif)
+            return {"status": "ok", "stored": "mongodb"}
+    except Exception as e:
+        print(f"[RequestAccess] MongoDB insert failed: {e}")
+
+    # Fallback to in-memory store
+    try:
+        add_notification(notif)
+        return {"status": "ok", "stored": "memory"}
+    except Exception as e:
+        print(f"[RequestAccess] add_notification failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to store request")
 
 # GET /run/status/{task_id}
 @app.get("/run/status/{task_id}")
@@ -958,12 +1374,13 @@ def get_master():
 
 # TECHNICAL
 @app.get("/technical/output")
-def get_technical():
+def get_technical(auth=Depends(check_role_or_local(["technical", "super_admin", "superadmin"]))):
+    """Protected: users with 'technical' role, super admin, or local internal agent may access."""
     return get_technical_output()
 
 @app.get("/technical/output/{rfp_id:path}")
-def get_technical_by_rfp(rfp_id: str):
-    """Get technical specs for a specific RFP by RFP ID"""
+def get_technical_by_rfp(rfp_id: str, auth=Depends(check_role_or_local(["technical", "super_admin", "superadmin"]))):
+    """Get technical specs for a specific RFP by RFP ID. Allows local internal agent."""
     technical = get_technical_output()
     
     if not technical:

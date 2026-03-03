@@ -5,11 +5,7 @@ import { authorizeRoles } from "../middleware/role.middleware.js";
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
-router.use(verifyToken);
-router.use(authorizeRoles("super_admin", "product"));
-
-// Get all products
+// Public: Get all products (read-only)
 router.get("/", async (req, res) => {
   try {
     const products = await Product.find();
@@ -18,6 +14,10 @@ router.get("/", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Protect mutating routes with authentication only (frontend enforces page-level role)
+router.use(verifyToken);
+
 
 // Create new product (dynamic fields supported)
 router.post("/", async (req, res) => {

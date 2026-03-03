@@ -5,11 +5,7 @@ import { authorizeRoles } from "../middleware/role.middleware.js";
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
-router.use(verifyToken);
-router.use(authorizeRoles("super_admin", "technical", "product"));
-
-// GET ALL
+// GET ALL (public read)
 router.get("/", async (req, res) => {
   try {
     const data = await TestingMatrix.find();
@@ -18,16 +14,15 @@ router.get("/", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// CREATE
-router.post("/", async (req, res) => {
+// CREATE (protected)
+router.post("/", verifyToken, async (req, res) => {
   const item = new TestingMatrix(req.body);
   await item.save();
   res.json(item);
 });
 
-// UPDATE
-router.put("/:id", async (req, res) => {
+// UPDATE (protected)
+router.put("/:id", verifyToken, async (req, res) => {
   const updated = await TestingMatrix.findByIdAndUpdate(
     req.params.id,
     req.body,
@@ -36,8 +31,8 @@ router.put("/:id", async (req, res) => {
   res.json(updated);
 });
 
-// DELETE
-router.delete("/:id", async (req, res) => {
+// DELETE (protected)
+router.delete("/:id", verifyToken, async (req, res) => {
   await TestingMatrix.findByIdAndDelete(req.params.id);
   res.json({ success: true });
 });

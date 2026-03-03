@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useUser } from '@clerk/clerk-react';
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
@@ -103,6 +104,21 @@ export default function Pricing() {
         setLoading(false);
       });
   }, []);
+
+  // Resolve user role (Clerk first, fallback to localStorage)
+  const { user } = useUser();
+  const getUserRole = () => {
+    if (user && ((user as any).publicMetadata || (user as any).public_metadata)) {
+      const meta = (user as any).publicMetadata || (user as any).public_metadata || {};
+      return meta.role || meta.roles || "";
+    }
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) return JSON.parse(stored).role || "";
+    } catch {}
+    return "";
+  };
+  const currentRole = getUserRole();
 
   // register dynamic texts for translation once pricing data arrives
   useEffect(() => {
@@ -684,7 +700,7 @@ Gross Margin: ₹${totalGrossMargin.toLocaleString(undefined, { minimumFractionD
             )}
           </div>
           <div className="flex gap-3">
-            {localStorage.getItem('pricing_margins') && (
+            { (currentRole === 'pricing' || currentRole === 'superadmin') && localStorage.getItem('pricing_margins') && (
               <Button 
                 variant="outline" 
                 onClick={resetMargins}

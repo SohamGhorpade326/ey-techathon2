@@ -94,6 +94,43 @@ export default function Proposal() {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Listen for cross-tab/local changes to pricing margins or discount so
+    // the proposal preview updates when Pricing page changes are made.
+    const storageHandler = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key === 'pricing_margins' || e.key === 'pricing_discount' || e.key === 'pricing_discount_applied') {
+        // Re-fetch pricing output and totals to recompute selling prices
+        Promise.all([
+          fetch(`${API}/pricing/totals`).then(res => res.json()),
+          fetch(`${API}/pricing/output`).then(res => res.json())
+        ]).then(([totalsData, pricingData]) => {
+          setPricingTotals(totalsData);
+
+          const savedMarginsRaw = localStorage.getItem('pricing_margins');
+          let margins: Record<number, number> = {};
+          if (savedMarginsRaw) {
+            try { margins = JSON.parse(savedMarginsRaw); } catch (_) { margins = {}; }
+          }
+
+          const itemsToSet = (pricingData.items || []).map((item: any, idx: number) => {
+            const marginPercent = margins[idx] !== undefined ? margins[idx] : (item.margin_percent || 10);
+            const baseCost = (item.material_total || 0) + (item.testing_cost || 0);
+            const sellingPrice = baseCost / (1 - (marginPercent / 100));
+            const grossMargin = sellingPrice - baseCost;
+            return { ...item, margin_percent: marginPercent, selling_price: sellingPrice, gross_margin: grossMargin };
+          });
+
+          setPricingItems(itemsToSet);
+        }).catch(err => {
+          // ignore fetch errors here
+          console.error('Error refreshing pricing after storage change', err);
+        });
+      }
+    };
+    window.addEventListener('storage', storageHandler);
+    return () => window.removeEventListener('storage', storageHandler);
+  }, []);
+  useEffect(() => {
     Promise.all([
       fetch(`${API}/proposal`).then(res => res.json()),
       fetch(`${API}/compliance`).then(res => res.json()),
@@ -246,12 +283,20 @@ export default function Proposal() {
         totalBidRegex,
         discountText
       );
+      // If the regex didn't match (proposal template differs), append the discount block at the end
+      if (updatedContent === originalBidContent) {
+        updatedContent = `${originalBidContent}\n\n${discountText}`;
+      }
     } else {
       // No discount - just update the subtotal value
       updatedContent = originalBidContent.replace(
         totalBidRegex,
         `The total bid value amounts to ₹${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
       );
+      // If regex didn't match, ensure the total is present
+      if (updatedContent === originalBidContent) {
+        updatedContent = `${originalBidContent}\n\nThe total bid value amounts to ₹${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
+      }
     }
     
     setEditableBidContent(updatedContent);
@@ -1422,7 +1467,7 @@ export default function Proposal() {
                   </Button>
                 </div>
                 <Textarea
-                  value={t ? t("Proposal.bid.original", editableBidContent) : editableBidContent}
+                  value={editableBidContent}
                   onChange={(e) => {
                     registerText && registerText("Proposal.bid.original", e.target.value);
                     setEditableBidContent(e.target.value);

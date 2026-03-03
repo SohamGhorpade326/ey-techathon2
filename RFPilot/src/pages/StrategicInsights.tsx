@@ -77,10 +77,11 @@ export default function StrategicInsights() {
   const fetchPastBids = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:5000/api/past-bids", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch(`${API_BASE}/api/past-bids`, {
+        headers,
       });
       
       if (response.ok) {
@@ -130,12 +131,12 @@ export default function StrategicInsights() {
     
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:5000/api/past-bids", {
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch(`${API_BASE}/api/past-bids`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({
           ...formData,
           bid_value_cr: parseFloat(formData.bid_value_cr),

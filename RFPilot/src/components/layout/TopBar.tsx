@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { Bell, Search, User, ChevronRight, LogOut } from "lucide-react";
+import { Bell, Search, ChevronRight, LogOut } from "lucide-react";
 import ModeToggle from "@/components/ModeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { useUser, UserButton, useClerk } from '@clerk/clerk-react';
 import { useT } from "@/hooks/useT";
 
 interface TopBarProps {
@@ -16,16 +17,35 @@ interface TopBarProps {
 export function TopBar({ title, breadcrumbs = [] }: TopBarProps) {
   const navigate = useNavigate();
   const [userRole, setUserRole] = useState<string>("");
+  const { user, isSignedIn } = useUser();
+  const clerk = useClerk();
 
   useEffect(() => {
-    const user = localStorage.getItem("user");
-    if (user) {
-      const userData = JSON.parse(user);
-      setUserRole(userData.role || "");
+    // Prefer Clerk user role when available, fallback to localStorage compatibility
+    if (user && (user.publicMetadata || user.public_metadata)) {
+      const meta = (user.publicMetadata as any) || (user as any).public_metadata || {};
+      setUserRole(meta.role || meta.roles || "");
+      return;
     }
-  }, []);
+    const stored = localStorage.getItem("user");
+    if (stored) {
+      try {
+        const userData = JSON.parse(stored);
+        setUserRole(userData.role || "");
+      } catch {
+        setUserRole("");
+      }
+    }
+  }, [user]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      if (clerk && typeof clerk.signOut === "function") {
+        await clerk.signOut();
+      }
+    } catch (e) {
+      // ignore sign out errors
+    }
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     navigate("/login");
@@ -116,9 +136,10 @@ export function TopBar({ title, breadcrumbs = [] }: TopBarProps) {
           </span>
         </Button>
 
-        <Button variant="ghost" size="icon" className="rounded-full">
-          <User className="h-5 w-5" />
-        </Button>
+        {/* Clerk user button (shows avatar / profile) */}
+        <div className="hidden md:block">
+          <UserButton />
+        </div>
 
         <Button
           variant="ghost"

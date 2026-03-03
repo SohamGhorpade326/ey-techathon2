@@ -1,70 +1,11 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-import { Sparkles, Eye, EyeOff, ArrowRight, Zap, Target, Clock } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SignIn, useUser, useAuth } from '@clerk/clerk-react';
+import { Sparkles } from "lucide-react";
+import { useState } from 'react';
+
+const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || import.meta.env.REACT_APP_CLERK_PUBLISHABLE_KEY || "";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    
-    try {
-      const response = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        alert(data.message || "Login failed");
-        setIsLoading(false);
-        return;
-      }
-
-      // Store token and user info
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("Login error:", error);
-      alert("Connection error. Please check if backend is running.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const features = [
-    {
-      icon: Zap,
-      title: "AI-Powered Discovery",
-      description: "Automatically discover RFPs from 50+ PSU portals",
-    },
-    {
-      icon: Target,
-      title: "Smart Spec Matching",
-      description: "Match requirements to your product catalog instantly",
-    },
-    {
-      icon: Clock,
-      title: "Faster Responses",
-      description: "Reduce response time from weeks to days",
-    },
-  ];
-
   return (
     <div className="min-h-screen flex">
       {/* Left Panel - Branding */}
@@ -75,13 +16,11 @@ export default function Login() {
         className="hidden lg:flex lg:w-1/2 bg-sidebar p-12 flex-col justify-between relative overflow-hidden shadow-2xl"
         style={{ background: "var(--gradient-sidebar)" }}
       >
-        {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-20 w-72 h-72 bg-sidebar-primary rounded-full blur-3xl animate-pulse" />
           <div className="absolute bottom-20 right-20 w-96 h-96 bg-sidebar-primary rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
         </div>
 
-        {/* Logo */}
         <div className="relative z-10">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sidebar-primary shadow-lg shadow-sidebar-primary/50">
@@ -94,7 +33,6 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Tagline & Features */}
         <div className="relative z-10 space-y-8">
           <div>
             <motion.h2
@@ -110,29 +48,8 @@ export default function Login() {
               Win more.
             </motion.h2>
           </div>
-
-          <div className="space-y-4">
-            {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
-                className="flex items-start gap-4 p-4 rounded-xl bg-sidebar-accent/50 backdrop-blur-sm border border-sidebar-accent/20 hover:bg-sidebar-accent/70 transition-all duration-300 hover:shadow-lg"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent shadow-md">
-                  <feature.icon className="h-5 w-5 text-sidebar-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sidebar-foreground">{feature.title}</h3>
-                  <p className="text-sm text-sidebar-muted">{feature.description}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
         </div>
 
-        {/* Footer */}
         <div className="relative z-10">
           <p className="text-xs text-sidebar-muted font-medium">
             Enterprise-grade security • SOC 2 Compliant • 99.9% Uptime
@@ -140,100 +57,84 @@ export default function Login() {
         </div>
       </motion.div>
 
-      {/* Right Panel - Login Form */}
+      {/* Right Panel - Clerk SignIn or helpful message when key missing */}
       <div className="flex-1 flex items-center justify-center p-8 bg-background">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="w-full max-w-md"
-        >
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center gap-3 mb-8">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/50">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
+        <div className="w-full max-w-md">
+          {clerkPublishableKey ? (
+            <>
+              <SignIn path="/login" routing="path" redirectUrl="/dashboard" />
+              <RequestAccessCTA />
+            </>
+          ) : (
+            <div className="p-8 bg-card rounded-md shadow">
+              <h2 className="text-xl font-semibold mb-2">Clerk not configured</h2>
+              <p className="text-sm text-muted-foreground mb-4">The Clerk publishable key is not set, so the sign-in widget cannot render.</p>
+              <p className="text-sm">To fix:
+                <ul className="list-disc ml-5 mt-2">
+                  <li>Add <code>VITE_CLERK_PUBLISHABLE_KEY</code> to your project root <code>.env</code> (or Vite env file) with your Clerk publishable key.</li>
+                  <li>Ensure the app origin (e.g. <code>http://localhost:8080</code>) is added to your Clerk dashboard's Allowed Origins and Redirect URLs.</li>
+                  <li>Restart the dev server after updating the env file.</li>
+                </ul>
+              </p>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">Agentic RFP</h1>
-              <p className="text-xs text-muted-foreground font-medium">Response Platform</p>
-            </div>
-          </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-          <div className="space-y-2 mb-8">
-            <h2 className="text-3xl font-bold text-foreground tracking-tight">Welcome back</h2>
-            <p className="text-muted-foreground">
-              Sign in to your account to continue
-            </p>
-          </div>
+function RequestAccessCTA() {
+  const { user, isSignedIn } = useUser();
+  const { getToken } = useAuth();
+  const [status, setStatus] = useState<string | null>(null);
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-semibold">Email address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="h-12 border-2 focus:border-primary transition-colors shadow-sm"
-              />
-            </div>
+  const role = (user as any)?.publicMetadata?.role || (user as any)?.public_metadata?.role;
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-semibold">Password</Label>
-                <a href="#" className="text-sm text-primary hover:underline font-medium transition-colors">
-                  Forgot password?
-                </a>
-              </div>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-12 pr-12 border-2 focus:border-primary transition-colors shadow-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
+  async function requestAccess() {
+    setStatus("sending");
+    try {
+      let token = null;
+      try {
+        token = await getToken({ template: "jwt" });
+      } catch (e) {
+        try { token = await getToken(); } catch(e2) { token = null; }
+      }
 
-            <Button
-              type="submit"
-              variant="hero"
-              className="w-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
-                />
-              ) : (
-                <>
-                  Sign In <ArrowRight className="h-5 w-5" />
-                </>
-              )}
-            </Button>
-          </form>
+      const payload = {
+        clerk_user_id: user?.id,
+        email: user?.primaryEmailAddress?.email || (user?.emailAddresses && user?.emailAddresses[0]?.email) || (user?.email) || null
+      };
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            Need access?{" "}
-            <a href="#" className="text-primary font-semibold hover:underline transition-colors">
-              Contact your administrator
-            </a>
-          </p>
-        </motion.div>
+      const apiBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || "http://127.0.0.1:5000";
+      console.debug('[RequestAccessCTA] apiBase=', apiBase, 'fullUrl=', apiBase + '/request-access');
+      const res = await fetch(apiBase + "/request-access", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      setStatus("requested");
+    } catch (e: any) {
+      console.error("Request access failed", e);
+      setStatus("error");
+    }
+  }
+
+  if (!isSignedIn || role) return null;
+
+  return (
+    <div className="mt-4 p-4 bg-muted rounded">
+      <p className="text-sm mb-2">Your account requires approval before you can access the app.</p>
+      <div className="flex items-center gap-3">
+        <button onClick={requestAccess} className="btn btn-primary" disabled={status === 'sending'}>
+          {status === 'sending' ? 'Sending…' : status === 'requested' ? 'Requested' : 'Request Access'}
+        </button>
+        {status === 'error' && <span className="text-sm text-destructive">Failed to send request</span>}
       </div>
     </div>
   );

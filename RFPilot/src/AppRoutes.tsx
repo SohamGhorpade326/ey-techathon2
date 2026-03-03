@@ -7,6 +7,7 @@ import Analysis from "./pages/Analysis";
 import Pricing from "./pages/Pricing";
 import Proposal from "./pages/Proposal";
 import Notifications from "./pages/Notifications";
+import AwaitingApproval from "./pages/AwaitingApproval";
 import Repository from "./pages/Repository";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -20,7 +21,8 @@ const AppRoutes = () => (
   <BrowserRouter>
     <Routes>
       <Route path="/" element={<Index />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/login/*" element={<Login />} />
+      <Route path="/awaiting-approval" element={<AwaitingApproval />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/discovery" element={<ProtectedRoute allowedRoles={["super_admin", "sales", "technical"]}><Discovery /></ProtectedRoute>} />
       <Route path="/rfp/:rfpId*" element={<ProtectedRoute allowedRoles={["super_admin", "sales", "technical"]}><RFPDetails /></ProtectedRoute>} />

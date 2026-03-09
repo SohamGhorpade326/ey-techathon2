@@ -8,6 +8,7 @@ playwright
 pymongo
 pytesseract
 pdf2image
+boto3
 numpy
 torch
 sentence-transformers
@@ -15,3 +16,5 @@ scikit-learn
 sympy
 sendgrid
 faiss-cpu
+chromadb
+groq

@@ -22,6 +22,15 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+# Optional RAG chatbot integration (LangChain + Chroma + Groq)
+try:
+    import rag_chatbot
+    RAG_AVAILABLE = True
+except Exception as _rag_import_err:
+    rag_chatbot = None
+    RAG_AVAILABLE = False
+    _rag_import_error = _rag_import_err
+
 # PowerPoint generation imports
 try:
     from pptx import Presentation
@@ -77,6 +86,12 @@ class CoverLetterRequest(BaseModel):
     buyer: str
     rfp_title: str
     rfp_id: str = ""
+
+
+class RagChatRequest(BaseModel):
+    message: str
+    history: Optional[List[Dict[str, str]]] = None
+    client_context: Optional[Dict[str, Any]] = None
 
 # ============================================================================
 # PowerPoint Template & Export Helper Functions
@@ -231,6 +246,87 @@ def translate_batch(data: dict):
         # best-effort: return whatever we translated so far
         pass
     return {"translations": translations}
+
+
+@app.get("/rag/health")
+def rag_health():
+    if not RAG_AVAILABLE:
+        return {
+            "status": "disabled",
+            "error": "rag_import_failed",
+            "detail": str(_rag_import_error),
+        }
+    return {"status": "ok"}
+
+
+@app.post("/rag/chat")
+def rag_chat(req: RagChatRequest):
+    """Public chatbot endpoint.
+
+    - Works on landing page (no auth required)
+    - Injects current pipeline state (if any) from in-memory store
+    """
+    if not RAG_AVAILABLE or rag_chatbot is None:
+        raise HTTPException(status_code=503, detail=f"RAG chatbot not available: {str(_rag_import_error)}")
+
+    message = (req.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    history = req.history or []
+    client_context = req.client_context or {}
+
+    # Build dynamic pipeline context best-effort.
+    dynamic_context: Dict[str, Any] = {}
+    try:
+        master = get_master_output() or {}
+        tech = get_technical_output() or {}
+        pricing = get_pricing_output() or {}
+        sales = get_sales_output() or []
+
+        # Selected RFP best-effort.
+        selected_rfp = (
+            master.get("selected_rfp")
+            or master.get("rfp")
+            or (master.get("technical_summary") or {}).get("rfp_context")
+            or (sales[0] if isinstance(sales, list) and len(sales) > 0 else None)
+            or {}
+        )
+        if isinstance(selected_rfp, dict) and selected_rfp:
+            dynamic_context["selected_rfp"] = selected_rfp
+
+        # Summaries if present (keep them compact for prompt).
+        if master.get("technical_summary"):
+            dynamic_context["technical_summary"] = master.get("technical_summary")
+        if master.get("pricing_summary"):
+            dynamic_context["pricing_summary"] = master.get("pricing_summary")
+
+        # Client (frontend) context such as current route.
+        route = client_context.get("pathname") or client_context.get("route")
+        if route:
+            dynamic_context["client_route"] = str(route)
+
+        # Keep vector store up-to-date with recent pipeline data.
+        try:
+            if isinstance(sales, list) and sales:
+                rag_chatbot.index_rfp_data(sales)
+            if isinstance(tech, dict) and tech:
+                rag_chatbot.index_technical_output(tech)
+            if isinstance(pricing, dict) and pricing:
+                rag_chatbot.index_pricing_output(pricing)
+        except Exception as e:
+            # Non-fatal: chat can still work without indexing.
+            logger.info("[RAG] Index update skipped: %s", e)
+    except Exception as e:
+        logger.info("[RAG] Failed to build dynamic context: %s", e)
+
+    result = rag_chatbot.chat(message=message, history=history, dynamic_context=dynamic_context)
+    # Ensure a consistent response shape.
+    return {
+        "response": result.get("response", ""),
+        "sources_used": int(result.get("sources_used", 0) or 0),
+        "error": result.get("error"),
+    }
 
 # Task status store
 task_status: Dict[str, str] = {}
@@ -636,6 +732,13 @@ async def startup_event():
     
     asyncio.create_task(delayed_warmup())
 
+    # RAG chatbot startup indexing (product catalog etc.)
+    if RAG_AVAILABLE and rag_chatbot is not None:
+        try:
+            rag_chatbot.startup_index()
+        except Exception as e:
+            print(f"[Startup] ⚠️ RAG startup indexing failed: {e}")
+
 
 
 @app.post("/auth/sync")
@@ -664,6 +767,11 @@ def run_pipeline_bg(task_id: str, skip_mode: bool = False):
         rfp_module = load_rfp_module()
         
         state = {}
+        # Deterministic per-run ID used for S3 object key prefixing.
+        # Keep it stable for the entire pipeline run.
+        run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ") + "_" + uuid.uuid4().hex[:12]
+        state["run_id"] = run_id
+        print(f"[Pipeline] 🆔 run_id={run_id}")
         
         if skip_mode:
             # Skip mode: Reuse existing sales data, don't re-download PDFs

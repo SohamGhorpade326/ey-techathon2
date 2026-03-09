@@ -24,6 +24,32 @@ GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
 
 # Groq API Key (for AI cover letter generation)
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# --- Secure PDF storage (AWS S3) ---
+# PDFs downloaded by the Sales Agent are uploaded to a private S3 bucket with
+# server-side encryption, then deleted locally. The pipeline persists only S3 URIs.
+
+# Required
+S3_BUCKET_NAME=your-private-bucket
+
+# Optional (recommended)
+AWS_REGION=ap-south-1
+S3_PREFIX=rfp-docs
+
+# Server-side encryption mode: SSE-S3 (default) or SSE-KMS
+S3_SSE_MODE=SSE-S3
+# Only if S3_SSE_MODE=SSE-KMS
+S3_KMS_KEY_ID=arn:aws:kms:region:account-id:key/xxxxxxx
+
+# Upload concurrency
+S3_UPLOAD_WORKERS=4
+
+# Optional helper (presigned URL helper)
+S3_PRESIGN_EXPIRES_SECONDS=300
+
+# Credentials (prototype; otherwise rely on default AWS credential chain)
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
 ```
 
 ### How to Get These:

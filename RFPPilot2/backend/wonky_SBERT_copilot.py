@@ -20,6 +20,7 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 from datetime import datetime
 from pdf2image import convert_from_path
 import hashlib
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from sentence_transformers import SentenceTransformer, util
@@ -29,6 +30,16 @@ from sklearn.neighbors import NearestNeighbors
 import numpy as np
 from store import save_rfp
 from store_new import get_skipped_rfp_ids
+from storage.s3_store import (
+    build_s3_upload_extra_args,
+    delete_local_file_best_effort,
+    get_s3_bucket_name,
+    get_s3_prefix,
+    is_s3_uri,
+    materialize_pdf_path,
+    upload_file_async,
+    wait_for_uploads,
+)
 from tech_formatters import (
     format_technical_for_frontend,
     build_comparison_matrix
@@ -712,53 +723,70 @@ def sales_agent_node(state: RFPState) -> RFPState:
     # STANDARD PDF PROCESSING (Original Logic)
     # ============================
 
+    # Per-run ID for S3 key prefixing (injected by main_new.py; keep a fallback)
+    run_id = state.get("run_id")
+    if not run_id:
+        run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ") + "_" + uuid.uuid4().hex[:12]
+        state["run_id"] = run_id
+
+    # S3 is required for website PDF secure storage
+    s3_bucket = get_s3_bucket_name()
+    s3_prefix = get_s3_prefix()
+    s3_extra_args = build_s3_upload_extra_args()
+
+    local_pdf_paths: List[str] = []
+    formatted_by_local: Dict[str, dict] = {}
+    upload_future_by_local: Dict[str, Any] = {}
+    s3_uri_by_local: Dict[str, str] = {}
+
     # ---------- Internal Helper: Memory-Safe OCR ----------
     def ocr_pages_from_pdf(pdf_path: str) -> List[str]:
         try:
-            with pdfplumber.open(pdf_path) as pdf:
-                total_pages = len(pdf.pages)
-                pages_to_ocr = []
-                if OCR_MODE == "all":
-                    pages_to_ocr = list(range(1, total_pages + 1))
-                else:
-                    pages_set = set()
-                    for p in range(1, min(total_pages, OCR_FIRST_PAGES) + 1): pages_set.add(p)
-                    for p in range(max(1, total_pages - OCR_LAST_PAGES + 1), total_pages + 1): pages_set.add(p)
-                    
-                    KEYWORDS = ["tender", "bid", "rfp", "submission", "deadline", "boq", "scope"]
-                    for idx, page in enumerate(pdf.pages, start=1):
-                        if len(pages_set) >= OCR_KEYWORD_PAGES_MAX + 8: break
-                        native = (page.extract_text() or "").lower()
-                        if native and any(k in native for k in KEYWORDS): pages_set.add(idx)
-                    pages_to_ocr = sorted(pages_set)
+            with materialize_pdf_path(pdf_path) as local_pdf_path:
+                with pdfplumber.open(local_pdf_path) as pdf:
+                    total_pages = len(pdf.pages)
+                    pages_to_ocr = []
+                    if OCR_MODE == "all":
+                        pages_to_ocr = list(range(1, total_pages + 1))
+                    else:
+                        pages_set = set()
+                        for p in range(1, min(total_pages, OCR_FIRST_PAGES) + 1): pages_set.add(p)
+                        for p in range(max(1, total_pages - OCR_LAST_PAGES + 1), total_pages + 1): pages_set.add(p)
+                        
+                        KEYWORDS = ["tender", "bid", "rfp", "submission", "deadline", "boq", "scope"]
+                        for idx, page in enumerate(pdf.pages, start=1):
+                            if len(pages_set) >= OCR_KEYWORD_PAGES_MAX + 8: break
+                            native = (page.extract_text() or "").lower()
+                            if native and any(k in native for k in KEYWORDS): pages_set.add(idx)
+                        pages_to_ocr = sorted(pages_set)
 
-            results_by_page = {}
-            def ocr_worker(image, abs_page):
-                try:
-                    return abs_page, pytesseract.image_to_string(image)
-                finally:
-                    image.close()
-
-            pages_to_ocr_sorted = sorted(pages_to_ocr)
-            batch_start_idx = 0
-            while batch_start_idx < len(pages_to_ocr_sorted):
-                batch_pages = pages_to_ocr_sorted[batch_start_idx : batch_start_idx + OCR_BATCH_SIZE]
-                batch_start_idx += OCR_BATCH_SIZE
-                images_with_pages = []
-                for abs_page in batch_pages:
+                results_by_page = {}
+                def ocr_worker(image, abs_page):
                     try:
-                        imgs = convert_from_path(pdf_path, dpi=OCR_DPI, poppler_path=POPPLER_PATH,
-                                                 first_page=abs_page, last_page=abs_page)
-                        if imgs: images_with_pages.append((abs_page, imgs[0]))
-                    except Exception as e: print(f"⚠️ PDF->image failed page {abs_page}: {e}")
+                        return abs_page, pytesseract.image_to_string(image)
+                    finally:
+                        image.close()
 
-                with ThreadPoolExecutor(max_workers=min(OCR_MAX_WORKERS, len(images_with_pages))) as executor:
-                    futures = [executor.submit(ocr_worker, img, p) for p, img in images_with_pages]
-                    for future in as_completed(futures):
-                        p, text = future.result()
-                        results_by_page[p] = text
+                pages_to_ocr_sorted = sorted(pages_to_ocr)
+                batch_start_idx = 0
+                while batch_start_idx < len(pages_to_ocr_sorted):
+                    batch_pages = pages_to_ocr_sorted[batch_start_idx : batch_start_idx + OCR_BATCH_SIZE]
+                    batch_start_idx += OCR_BATCH_SIZE
+                    images_with_pages = []
+                    for abs_page in batch_pages:
+                        try:
+                            imgs = convert_from_path(local_pdf_path, dpi=OCR_DPI, poppler_path=POPPLER_PATH,
+                                                     first_page=abs_page, last_page=abs_page)
+                            if imgs: images_with_pages.append((abs_page, imgs[0]))
+                        except Exception as e: print(f"⚠️ PDF->image failed page {abs_page}: {e}")
 
-            return [results_by_page.get(p, "") for p in pages_to_ocr_sorted]
+                    with ThreadPoolExecutor(max_workers=min(OCR_MAX_WORKERS, len(images_with_pages))) as executor:
+                        futures = [executor.submit(ocr_worker, img, p) for p, img in images_with_pages]
+                        for future in as_completed(futures):
+                            p, text = future.result()
+                            results_by_page[p] = text
+
+                return [results_by_page.get(p, "") for p in pages_to_ocr_sorted]
         except Exception as e:
             print(f"❌ OCR Selection Failed: {e}")
             return []
@@ -772,8 +800,9 @@ def sales_agent_node(state: RFPState) -> RFPState:
         try:
             # B) REMOVE UNNECESSARY OCR (MAJOR SPEEDUP)
             # FIRST try native text extraction
-            with pdfplumber.open(file_path) as pdf:
-                combined_text = "\n".join([p.extract_text() or "" for p in pdf.pages[:10]])
+            with materialize_pdf_path(file_path) as local_pdf_path:
+                with pdfplumber.open(local_pdf_path) as pdf:
+                    combined_text = "\n".join([p.extract_text() or "" for p in pdf.pages[:10]])
             
             # Only use OCR if native text is insufficient
             # 🚀 OPTIMIZATION 3: Reduced threshold from 300 to 50 - disable OCR when native text exists
@@ -821,7 +850,10 @@ def sales_agent_node(state: RFPState) -> RFPState:
             # Step 1: Scan for trigger pages containing BOQ/Price Bid sections
             # 🚀 SMART PAGE SCANNING: For large documents (>50 pages), scan last 15 pages FIRST
             try:
-                with pdfplumber.open(file_path) as pdf:
+                from contextlib import ExitStack
+                with ExitStack() as stack:
+                    local_pdf_path = stack.enter_context(materialize_pdf_path(file_path))
+                    pdf = stack.enter_context(pdfplumber.open(local_pdf_path))
                     trigger_keywords = [
                         'price bid', 'schedule of items',
                         'boq', 'bill of quantities', 'quantity',
@@ -889,7 +921,7 @@ JSON:"""
                             print(f"[PDF {pdf_index}] 🔄 Native text extraction empty — trying OCR on trigger pages {trigger_page_nums}")
                             try:
                                 ocr_texts = []
-                                imgs = convert_from_path(file_path, first_page=trigger_page_nums[0]+1,
+                                imgs = convert_from_path(local_pdf_path, first_page=trigger_page_nums[0]+1,
                                                          last_page=trigger_page_nums[0]+1,
                                                          dpi=200, poppler_path=POPPLER_PATH)
                                 for img in imgs:
@@ -1047,17 +1079,17 @@ JSON:"""
                 buttons.nth(i).click()
             download = download_info.value
             download.save_as(file_path)
-            pdf_paths.append(file_path)
+            local_pdf_paths.append(file_path)
             print(f"[Sales Agent] ✅ Captured download {i+1}: {file_path}")
         
-        print(f"[Sales Agent] ✅ Downloaded {len(pdf_paths)} PDFs")
+        print(f"[Sales Agent] ✅ Downloaded {len(local_pdf_paths)} PDFs")
         
         # STEP 2: Process all PDFs in parallel 🚀
-        print(f"[Sales Agent] 🚀 Processing {len(pdf_paths)} PDFs in parallel (OCR_MAX_WORKERS={OCR_MAX_WORKERS})...")
+        print(f"[Sales Agent] 🚀 Processing {len(local_pdf_paths)} PDFs in parallel (OCR_MAX_WORKERS={OCR_MAX_WORKERS})...")
         with ThreadPoolExecutor(max_workers=OCR_MAX_WORKERS) as executor:
             # Submit all PDF processing tasks
             futures = {executor.submit(process_single_pdf, pdf_path, i): (pdf_path, i) 
-                      for i, pdf_path in enumerate(pdf_paths)}
+                      for i, pdf_path in enumerate(local_pdf_paths)}
             
             # Collect results as they complete
             for future in as_completed(futures):
@@ -1068,8 +1100,8 @@ JSON:"""
                         # strip rfp_id to avoid accidental whitespace and duplicates
                         if isinstance(formatted.get("rfp_id"), str):
                             formatted["rfp_id"] = formatted["rfp_id"].strip()
+                        formatted_by_local[pdf_path] = formatted
                         save_rfp(formatted)
-                        results.append(formatted)
 
                         print(f"\n[Sales Agent] ✅ Processed PDF {pdf_index + 1}:")
                         print(json.dumps({
@@ -1087,8 +1119,42 @@ JSON:"""
                         }, indent=2))
                 except Exception as e:
                     print(f"[Sales Agent] ❌ PDF {pdf_index + 1} processing failed: {e}")
+                finally:
+                    # Async S3 upload (non-blocking). Delete local PDFs only after uploads succeed.
+                    if pdf_path not in upload_future_by_local:
+                        key = f"{s3_prefix}/{run_id}/rfp_{pdf_index + 1}.pdf"
+                        s3_uri = f"s3://{s3_bucket}/{key}"
+                        s3_uri_by_local[pdf_path] = s3_uri
+                        upload_future_by_local[pdf_path] = upload_file_async(
+                            pdf_path, s3_bucket, key, extra_args=s3_extra_args
+                        )
         
-        print(f"[Sales Agent] ✅ Parallel processing complete - {len(results)} RFPs extracted")
+        print(f"[Sales Agent] ✅ Parallel processing complete - {len(formatted_by_local)} RFPs extracted")
+
+        # STEP 3: Ensure all uploads completed successfully, then delete locals
+        print(f"[Sales Agent] ☁️ Waiting for {len(upload_future_by_local)} S3 upload(s) to finish...")
+        wait_for_uploads(upload_future_by_local.values())
+        print("[Sales Agent] ✅ All S3 uploads completed")
+
+        for local_path in list(local_pdf_paths):
+            delete_local_file_best_effort(local_path)
+
+        # STEP 4: Replace local paths with canonical S3 URIs and re-key text cache
+        results = []
+        pdf_paths = []
+        new_pdf_text_cache = {}
+        for local_path in local_pdf_paths:
+            formatted = formatted_by_local.get(local_path)
+            s3_uri = s3_uri_by_local.get(local_path)
+            if not formatted or not s3_uri:
+                continue
+            formatted["pdf_path"] = s3_uri
+            results.append(formatted)
+            pdf_paths.append(s3_uri)
+            if local_path in pdf_text_cache:
+                new_pdf_text_cache[s3_uri] = pdf_text_cache[local_path]
+
+        pdf_text_cache = new_pdf_text_cache
         
     finally:
         # 🚀 PERSISTENT PAGE: Just clear page state, don't close anything
@@ -1366,14 +1432,18 @@ def master_agent_node(state: RFPState) -> RFPState:
         
         # Extract PDF text for domain classification
         rfp_text = ""
-        if selected_pdf and os.path.exists(selected_pdf):
-            try:
-                with pdfplumber.open(selected_pdf) as pdf:
-                    # Extract first few pages for domain classification
-                    rfp_text = "\n".join([p.extract_text() or "" for p in pdf.pages[:5]])
-            except Exception as e:
-                print(f"[Master Agent] ⚠️ PDF read error: {e}")
-                rfp_text = ""
+        try:
+            state_cache = state.get("pdf_text_cache", {})
+            if selected_pdf and isinstance(state_cache, dict) and selected_pdf in state_cache:
+                rfp_text = state_cache.get(selected_pdf) or ""
+            elif selected_pdf:
+                with materialize_pdf_path(selected_pdf) as local_pdf_path:
+                    with pdfplumber.open(local_pdf_path) as pdf:
+                        # Extract first few pages for domain classification
+                        rfp_text = "\n".join([p.extract_text() or "" for p in pdf.pages[:5]])
+        except Exception as e:
+            print(f"[Master Agent] ⚠️ PDF read error: {e}")
+            rfp_text = ""
         
         # Fallback to RFP title/description if PDF extraction fails
         if not rfp_text.strip():
@@ -2304,9 +2374,15 @@ def technical_agent_node(state: RFPState) -> RFPState:
     
     if not is_gmail_rfp:
         # Standard PDF-based RFP: validate PDF exists
-        if not pdf_path or not os.path.exists(pdf_path):
+        if not pdf_path:
             print(f"[Technical Agent] ❌ PDF missing: {pdf_path}")
             # Set empty technical_output_raw to prevent KeyError in downstream nodes
+            raw = {"rfp_id": rfp_id, "items": [], "status": "Error - PDF Missing", "domain": domain}
+            state["technical_output_raw"] = raw
+            state["technical_output"] = format_technical_for_frontend(raw)
+            return state
+        if (not is_s3_uri(pdf_path)) and (not os.path.exists(pdf_path)):
+            print(f"[Technical Agent] ❌ PDF missing: {pdf_path}")
             raw = {"rfp_id": rfp_id, "items": [], "status": "Error - PDF Missing", "domain": domain}
             state["technical_output_raw"] = raw
             state["technical_output"] = format_technical_for_frontend(raw)

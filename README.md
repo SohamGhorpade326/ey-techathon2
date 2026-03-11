@@ -1,4 +1,4 @@
-# Agentic RFPilot (EY Techathon)
+# Agentic RFPilot
 
 This repo contains a multi-service prototype for discovering RFPs, running an agentic analysis workflow (sales/technical/pricing/compliance), managing SKUs/products, and generating proposal outputs. It includes:
 
@@ -6,6 +6,7 @@ This repo contains a multi-service prototype for discovering RFPs, running an ag
 - A Node/Express API (RBAC + product/SKU/RFP endpoints)
 - A Python/FastAPI backend (agent pipeline, RAG chatbot, translation, notifications, PPT export)
 - A Gmail listener that ingests recent tender/RFP emails into the FastAPI backend
+- A AWS S3 bucket integration for storage and archival purposes of RFPs. 
 
 ## Repository layout
 
